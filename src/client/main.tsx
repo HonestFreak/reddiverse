@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import FallbackVoxel from './FallbackVoxel';
+import App from './App';
 
 const container = document.getElementById('root');
 if (!container) {
@@ -8,4 +8,4 @@ if (!container) {
 }
 
 const root = createRoot(container);
-root.render(<FallbackVoxel />);
+root.render(<App />);

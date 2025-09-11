@@ -12,9 +12,7 @@ export const createPost = async () => {
     },
     subredditName: subredditName,
     title: 'myvoxel234',
-    // Initialize post data with empty blocks array for voxel persistence
-    postData: {
-      blocks: [],
-    },
+    // No need to store blocks in post data anymore - using Redis instead
+    postData: {},
   });
 };

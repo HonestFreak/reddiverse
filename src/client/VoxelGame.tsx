@@ -9,7 +9,7 @@ import { ChunkStreamer } from './core/world/ChunkStreamer';
 import { InputManager } from './core/input/InputManager';
 import { ThirdPersonController } from './core/player/ThirdPersonController';
 
-function FallbackVoxel() {
+function VoxelGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -326,7 +326,7 @@ function FallbackVoxel() {
     function resetSpawn() {
       const sx = 0;
       const sz = 0;
-      const gy = heightAt(Math.round(sx), Math.round(sz));
+      const gy = heightAt(Math.round(sx), Math.round(sz)) + 0.5; // Top surface of terrain blocks
       controller.playerBase.set(sx, gy, sz);
       const camTarget = new THREE.Vector3().copy(controller.playerBase).add(new THREE.Vector3(0, cameraHeight, 0));
       camera.position.copy(new THREE.Vector3(camTarget.x, camTarget.y, camTarget.z + cameraDistance));
@@ -544,6 +544,57 @@ function FallbackVoxel() {
       scene.add(testCubeLine);
     }
 
+    // Player collision box visualization
+    let playerCollisionBox: THREE.LineSegments | null = null;
+    if (defaultGameConfig.render.showCollisionOutlines) {
+      const playerHeight = defaultGameConfig.controls.playerHeight;
+      const playerWidth = 0.6; // Approximate player width
+      const playerDepth = 0.6; // Approximate player depth
+      
+      const playerBoxGeo = new THREE.BoxGeometry(playerWidth, playerHeight, playerDepth);
+      const playerBoxEdges = new THREE.EdgesGeometry(playerBoxGeo);
+      playerCollisionBox = new THREE.LineSegments(
+        playerBoxEdges,
+        new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 })
+      );
+      scene.add(playerCollisionBox);
+    }
+
+    // Ground collision visualization - show ground height at player position
+    let groundCollisionIndicator: THREE.LineSegments | null = null;
+    if (defaultGameConfig.render.showCollisionOutlines) {
+      const groundBoxGeo = new THREE.BoxGeometry(1, 0.1, 1);
+      const groundBoxEdges = new THREE.EdgesGeometry(groundBoxGeo);
+      groundCollisionIndicator = new THREE.LineSegments(
+        groundBoxEdges,
+        new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2 })
+      );
+      scene.add(groundCollisionIndicator);
+    }
+
+    // Terrain wireframe visualization - show actual terrain blocks
+    let terrainWireframes: THREE.LineSegments[] = [];
+    if (defaultGameConfig.render.showCollisionOutlines) {
+      // Create wireframes for a small area around the player
+      const wireframeSize = 5; // 5x5 area
+      for (let x = -wireframeSize; x <= wireframeSize; x++) {
+        for (let z = -wireframeSize; z <= wireframeSize; z++) {
+          const terrainHeight = heightAt(x, z);
+          if (terrainHeight > 0) {
+            const blockGeo = new THREE.BoxGeometry(1, 1, 1);
+            const blockEdges = new THREE.EdgesGeometry(blockGeo);
+            const blockWireframe = new THREE.LineSegments(
+              blockEdges,
+              new THREE.LineBasicMaterial({ color: 0x0000ff, linewidth: 1, transparent: true, opacity: 0.3 })
+            );
+            blockWireframe.position.set(x, terrainHeight, z); // Position wireframe at bottom of block (same as actual terrain)
+            scene.add(blockWireframe);
+            terrainWireframes.push(blockWireframe);
+          }
+        }
+      }
+    }
+
     // Mouse look
     function onMouseMove(event: MouseEvent) {
       const isLocked = document.pointerLockElement === canvas;
@@ -706,7 +757,7 @@ function FallbackVoxel() {
       controller.pitch = pitch;
       controller.updatePhysics(
         delta,
-        { gravity, walkSpeed, sprintMultiplier, damping, cameraDistance, cameraHeight, canJumpRef },
+        { gravity, walkSpeed, sprintMultiplier, damping, cameraDistance, cameraHeight, playerHeight: defaultGameConfig.controls.playerHeight, canJumpRef },
         velocity,
         heightAt
       );
@@ -716,6 +767,23 @@ function FallbackVoxel() {
 
       // Update self avatar position
       if (selfGroup) selfGroup.position.copy(controller.playerBase);
+      
+      // Update player collision box visualization
+      if (playerCollisionBox) {
+        playerCollisionBox.position.copy(controller.playerBase);
+        playerCollisionBox.position.y += defaultGameConfig.controls.playerHeight / 2; // Center the box on the player (playerBase is at feet)
+      }
+      
+      // Update ground collision indicator
+      if (groundCollisionIndicator) {
+        const gx = Math.round(controller.playerBase.x);
+        const gz = Math.round(controller.playerBase.z);
+        const groundY = heightAt(gx, gz) + 0.5; // Top surface of terrain blocks
+        groundCollisionIndicator.position.set(gx, groundY, gz);
+        
+        // Debug: log the collision values
+        console.log(`Collision debug: playerBase.y=${controller.playerBase.y.toFixed(2)}, ground=${heightAt(gx, gz)}, surface=${groundY}`);
+      }
     }
 
     // Remote players state
@@ -1425,4 +1493,4 @@ function FallbackVoxel() {
   );
 }
 
-export default FallbackVoxel;
+export default VoxelGame;

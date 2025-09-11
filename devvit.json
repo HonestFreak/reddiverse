@@ -28,6 +28,9 @@
   "triggers": {
     "onAppInstall": "/internal/on-app-install"
   },
+  "permissions": {
+    "redis": true
+  },
   "dev": {
     "subreddit": "myvoxel234_dev"
   }
