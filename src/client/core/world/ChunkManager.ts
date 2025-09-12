@@ -10,7 +10,7 @@ export class ChunkManager {
   private readonly renderConfig: RenderConfig;
   private readonly scene: THREE.Scene;
 
-  private chunks: Map<ChunkKey, { data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments }>; 
+  private chunks: Map<ChunkKey, { data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments | undefined }>; 
 
   constructor(
     scene: THREE.Scene,
@@ -25,7 +25,7 @@ export class ChunkManager {
     this.chunks = new Map();
   }
 
-  generateChunk(cx: number, cz: number): { data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments } {
+  generateChunk(cx: number, cz: number): { data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments | undefined } {
     const { sizeX, sizeZ, blockSize } = this.chunkConfig;
     const heights = new Uint8Array(sizeX * sizeZ);
 
@@ -57,6 +57,10 @@ export class ChunkManager {
     if (this.chunks.has(key)) return;
     const created = this.generateChunk(cx, cz);
     this.chunks.set(key, created);
+  }
+
+  getAllTerrainMeshes(): THREE.InstancedMesh[] {
+    return Array.from(this.chunks.values()).map(chunk => chunk.mesh);
   }
 }
 

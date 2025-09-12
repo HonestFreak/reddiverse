@@ -14,7 +14,7 @@ export class ThirdPersonController {
     this.input = input;
   }
 
-  updatePhysics(delta: number, opts: { gravity: number; walkSpeed: number; sprintMultiplier: number; damping: number; cameraDistance: number; cameraHeight: number; playerHeight: number; canJumpRef?: { current: boolean } }, velocity: THREE.Vector3, heightAt: (x: number, z: number) => number): void {
+  updatePhysics(delta: number, opts: { gravity: number; walkSpeed: number; sprintMultiplier: number; damping: number; cameraDistance: number; cameraHeight: number; playerHeight: number; canJumpRef?: { current: boolean } }, velocity: THREE.Vector3, heightAt: (x: number, z: number) => number, placedBlocks?: THREE.Mesh[]): void {
     const { gravity, walkSpeed, sprintMultiplier, damping, cameraDistance, cameraHeight, playerHeight, canJumpRef } = opts;
 
     // Apply friction to horizontal velocity
@@ -39,18 +39,100 @@ export class ThirdPersonController {
     const moveVector = new THREE.Vector3();
     if (direction.z !== 0) moveVector.addScaledVector(forwardDir, -direction.z * speed);
     if (direction.x !== 0) moveVector.addScaledVector(rightDir, direction.x * speed);
-    this.playerBase.add(moveVector);
+    
+    // Check for horizontal collision with placed blocks before moving
+    if (placedBlocks && moveVector.length() > 0) {
+      const newX = this.playerBase.x + moveVector.x;
+      const newZ = this.playerBase.z + moveVector.z;
+      const playerRadius = 0.3; // Approximate player radius
+      
+      let canMoveX = true;
+      let canMoveZ = true;
+      
+      for (const block of placedBlocks) {
+        const blockPos = block.position;
+        const blockX = Math.round(blockPos.x);
+        const blockZ = Math.round(blockPos.z);
+        const blockY = blockPos.y;
+        
+        // Check if there's a block at the new position
+        const newBlockX = Math.round(newX);
+        const newBlockZ = Math.round(newZ);
+        
+        // Check X movement collision
+        if (newBlockX === blockX && Math.round(this.playerBase.z) === blockZ) {
+          // Check if player would collide with this block vertically
+          const playerBottom = this.playerBase.y;
+          const playerTop = this.playerBase.y + playerHeight;
+          const blockBottom = blockY - 0.5; // Block bottom surface
+          const blockTop = blockY + 0.5;   // Block top surface
+          
+          if (playerTop > blockBottom && playerBottom < blockTop) {
+            canMoveX = false;
+          }
+        }
+        
+        // Check Z movement collision
+        if (Math.round(this.playerBase.x) === blockX && newBlockZ === blockZ) {
+          // Check if player would collide with this block vertically
+          const playerBottom = this.playerBase.y;
+          const playerTop = this.playerBase.y + playerHeight;
+          const blockBottom = blockY - 0.5; // Block bottom surface
+          const blockTop = blockY + 0.5;   // Block top surface
+          
+          if (playerTop > blockBottom && playerBottom < blockTop) {
+            canMoveZ = false;
+          }
+        }
+      }
+      
+      // Apply movement only if no collision
+      if (canMoveX) this.playerBase.x += moveVector.x;
+      if (canMoveZ) this.playerBase.z += moveVector.z;
+    } else {
+      this.playerBase.add(moveVector);
+    }
 
     // Vertical movement
     this.playerBase.y += velocity.y * delta;
 
-    // Ground collision
+    // Ground collision - check both terrain and placed blocks
     const gx = Math.round(this.playerBase.x);
     const gz = Math.round(this.playerBase.z);
-    const ground = heightAt(gx, gz);
-    // The terrain height represents the center of a 1u tall block positioned at y = h
-    // So the block's top face is at (h + 0.5). The player's base (feet) should rest there.
-    const minBaseY = ground + 0.5;
+    const terrainHeight = heightAt(gx, gz);
+    
+    // Check for collision with placed blocks at player position
+    let placedBlockHeight = -Infinity;
+    if (placedBlocks) {
+      for (const block of placedBlocks) {
+        const blockPos = block.position;
+        const blockX = Math.round(blockPos.x);
+        const blockZ = Math.round(blockPos.z);
+        
+        // Check if this block is at the same x,z position as the player
+        if (blockX === gx && blockZ === gz) {
+          // Block top surface is at blockPos.y + 0.5 (block center + half height)
+          const blockTop = blockPos.y + 0.5;
+          if (blockTop > placedBlockHeight) {
+            placedBlockHeight = blockTop;
+          }
+        }
+      }
+    }
+    
+    // Use the higher of terrain or placed block height
+    const groundHeight = Math.max(terrainHeight, placedBlockHeight);
+    
+    // For terrain: height represents center, so top surface is height + 0.5
+    // For placed blocks: placedBlockHeight already represents the top surface
+    let minBaseY: number;
+    if (placedBlockHeight > terrainHeight) {
+      // Standing on placed blocks - use the height directly (already top surface)
+      minBaseY = placedBlockHeight;
+    } else {
+      // Standing on terrain - add 0.5 to get top surface
+      minBaseY = terrainHeight + 0.5;
+    }
     if (this.playerBase.y < minBaseY) {
       velocity.y = 0;
       this.playerBase.y = minBaseY;

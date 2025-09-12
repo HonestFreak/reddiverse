@@ -270,6 +270,7 @@ function VoxelGame() {
     const mouse = new THREE.Vector2();
     const placedMeshes: THREE.Mesh[] = [];
     const placedOutlines: THREE.LineSegments[] = [];
+    const placedCollisionBoxes: THREE.LineSegments[] = [];
 
     const gravity = defaultGameConfig.controls.gravity;
     const walkSpeed = defaultGameConfig.controls.walkSpeed;
@@ -393,11 +394,22 @@ function VoxelGame() {
         const edges = new THREE.EdgesGeometry(geometry);
         const outline = new THREE.LineSegments(
           edges,
-          new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 })
+          new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 }) // Green outline for placed blocks
         );
         outline.position.copy(block.position);
         scene.add(outline);
         placedOutlines.push(outline);
+        
+        // Add collision box visualization (red wireframe)
+        const collisionBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+        const collisionBoxEdges = new THREE.EdgesGeometry(collisionBoxGeo);
+        const collisionBox = new THREE.LineSegments(
+          collisionBoxEdges,
+          new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3, transparent: true, opacity: 0.8 })
+        );
+        collisionBox.position.copy(block.position);
+        scene.add(collisionBox);
+        placedCollisionBoxes.push(collisionBox);
       }
       
       addDebugLog(`Block created and added to scene at ${x}, ${y}, ${z}`);
@@ -429,6 +441,16 @@ function VoxelGame() {
           scene.remove(outlineToRemove);
           const outlineIndex = placedOutlines.indexOf(outlineToRemove);
           if (outlineIndex > -1) placedOutlines.splice(outlineIndex, 1);
+        }
+        
+        // Remove corresponding collision box
+        const collisionBoxToRemove = placedCollisionBoxes.find(collisionBox => 
+          collisionBox.position.equals(blockToRemove.position)
+        );
+        if (collisionBoxToRemove) {
+          scene.remove(collisionBoxToRemove);
+          const collisionBoxIndex = placedCollisionBoxes.indexOf(collisionBoxToRemove);
+          if (collisionBoxIndex > -1) placedCollisionBoxes.splice(collisionBoxIndex, 1);
         }
       }
 
@@ -462,28 +484,44 @@ function VoxelGame() {
       
       raycaster.setFromCamera(mouse, camera);
       
-      // Check intersection with existing placed blocks and ground
-      const intersects = raycaster.intersectObjects([ground as unknown as THREE.Object3D, ...placedMeshes], false);
+      // Get all terrain meshes for raycasting
+      const allTerrainMeshes = chunkManager.getAllTerrainMeshes();
+      
+      // Check intersection with existing placed blocks, ground, and terrain
+      const intersects = raycaster.intersectObjects([ground as unknown as THREE.Object3D, ...placedMeshes, ...allTerrainMeshes], false);
       addDebugLog(`Found ${intersects.length} intersections`);
       
       if (intersects.length > 0) {
         const intersected = intersects[0];
         if (intersected) {
-          const block = intersected.object as THREE.Mesh;
+          const block = intersected.object as THREE.Mesh | THREE.InstancedMesh;
+          const isTerrain = allTerrainMeshes.includes(block as THREE.InstancedMesh);
+          const isGround = block === ground;
           
           if (event instanceof MouseEvent) {
             if (event.button === 0) { // Left click - place block adjacent to face
               const face = intersected.face;
               if (face) {
                 const normal = face.normal.clone();
-                const base = block === ground ? intersected.point.clone() : block.position.clone();
-                if (block !== ground) normal.transformDirection(block.matrixWorld);
+                let base: THREE.Vector3;
+                
+                if (isGround) {
+                  base = intersected.point.clone();
+                } else if (isTerrain) {
+                  // For terrain, use the intersection point directly
+                  base = intersected.point.clone();
+                } else {
+                  // For placed blocks, use block position
+                  base = block.position.clone();
+                  normal.transformDirection(block.matrixWorld);
+                }
+                
                 const newPos = base.add(normal);
                 addDebugLog(`Placing block at ${Math.round(newPos.x)}, ${Math.round(newPos.y)}, ${Math.round(newPos.z)}`);
                 placeBlock(Math.round(newPos.x), Math.round(newPos.y), Math.round(newPos.z), selectedBlockTypeRef.current);
               }
             } else if (event.button === 2) { // Right click - remove block
-              if (block !== ground) {
+              if (!isGround && !isTerrain) {
                 addDebugLog(`Removing block at ${block.position.x}, ${block.position.y}, ${block.position.z}`);
                 removeBlock(block.position.x, block.position.y, block.position.z);
               }
@@ -493,8 +531,19 @@ function VoxelGame() {
             const face = intersected.face;
             if (face) {
               const normal = face.normal.clone();
-              const base = block === ground ? intersected.point.clone() : block.position.clone();
-              if (block !== ground) normal.transformDirection(block.matrixWorld);
+              let base: THREE.Vector3;
+              
+              if (isGround) {
+                base = intersected.point.clone();
+              } else if (isTerrain) {
+                // For terrain, use the intersection point directly
+                base = intersected.point.clone();
+              } else {
+                // For placed blocks, use block position
+                base = block.position.clone();
+                normal.transformDirection(block.matrixWorld);
+              }
+              
               const newPos = base.add(normal);
               addDebugLog(`Touch placing block at ${Math.round(newPos.x)}, ${Math.round(newPos.y)}, ${Math.round(newPos.z)}`);
               placeBlock(Math.round(newPos.x), Math.round(newPos.y), Math.round(newPos.z), selectedBlockTypeRef.current);
@@ -759,7 +808,8 @@ function VoxelGame() {
         delta,
         { gravity, walkSpeed, sprintMultiplier, damping, cameraDistance, cameraHeight, playerHeight: defaultGameConfig.controls.playerHeight, canJumpRef },
         velocity,
-        heightAt
+        heightAt,
+        placedMeshes
       );
       // Sync back yaw/pitch for UI/inputs that still use local yaw/pitch
       yaw = controller.yaw;
