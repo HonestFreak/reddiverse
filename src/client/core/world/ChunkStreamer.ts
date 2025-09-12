@@ -23,13 +23,17 @@ export class ChunkStreamer {
     return { cx, cz };
   }
 
-  ensureAroundWorld(wx: number, wz: number): void {
+  async ensureAroundWorld(wx: number, wz: number): Promise<void> {
     const { cx, cz } = this.worldToChunk(wx, wz);
+    const promises: Promise<void>[] = [];
+    
     for (let dz = -this.radius; dz <= this.radius; dz++) {
       for (let dx = -this.radius; dx <= this.radius; dx++) {
-        this.manager.ensureChunk(cx + dx, cz + dz);
+        promises.push(this.manager.ensureChunk(cx + dx, cz + dz));
       }
     }
+    
+    await Promise.all(promises);
   }
 }
 

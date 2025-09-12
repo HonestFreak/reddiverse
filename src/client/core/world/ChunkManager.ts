@@ -3,12 +3,15 @@ import { TerrainGenerator } from '../../../shared/core/terrain/TerrainGenerator'
 import { ChunkConfig, RenderConfig } from '../../../shared/config/gameConfig';
 import { ChunkData, chunkKey, ChunkKey, indexOf } from './ChunkTypes';
 import { buildSurfaceInstancedMesh } from './ChunkBuilder';
+import { BlockFactory } from '../blocks/BlockFactory';
+import { BlockTypeRegistry } from '../../../shared/types/BlockTypes';
 
 export class ChunkManager {
   private readonly terrain: TerrainGenerator;
   private readonly chunkConfig: ChunkConfig;
   private readonly renderConfig: RenderConfig;
   private readonly scene: THREE.Scene;
+  private readonly blockFactory: BlockFactory;
 
   private chunks: Map<ChunkKey, { data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments | undefined }>; 
 
@@ -16,16 +19,18 @@ export class ChunkManager {
     scene: THREE.Scene,
     terrain: TerrainGenerator,
     chunkConfig: ChunkConfig,
-    renderConfig: RenderConfig
+    renderConfig: RenderConfig,
+    blockTypes: BlockTypeRegistry
   ) {
     this.scene = scene;
     this.terrain = terrain;
     this.chunkConfig = chunkConfig;
     this.renderConfig = renderConfig;
+    this.blockFactory = new BlockFactory(blockTypes);
     this.chunks = new Map();
   }
 
-  generateChunk(cx: number, cz: number): { data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments | undefined } {
+  async generateChunk(cx: number, cz: number): Promise<{ data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments | undefined }> {
     const { sizeX, sizeZ, blockSize } = this.chunkConfig;
     const heights = new Uint8Array(sizeX * sizeZ);
 
@@ -40,7 +45,7 @@ export class ChunkManager {
     }
 
     const data: ChunkData = { sizeX, sizeZ, blockSize, heights };
-    const { mesh, outline } = buildSurfaceInstancedMesh(data, this.renderConfig);
+    const { mesh, outline } = await buildSurfaceInstancedMesh(data, this.renderConfig, this.blockFactory, 'grass');
     mesh.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
     this.scene.add(mesh);
     
@@ -52,10 +57,10 @@ export class ChunkManager {
     return { data, mesh, outline };
   }
 
-  ensureChunk(cx: number, cz: number): void {
+  async ensureChunk(cx: number, cz: number): Promise<void> {
     const key = chunkKey(cx, cz);
     if (this.chunks.has(key)) return;
-    const created = this.generateChunk(cx, cz);
+    const created = await this.generateChunk(cx, cz);
     this.chunks.set(key, created);
   }
 

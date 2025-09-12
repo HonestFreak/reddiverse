@@ -8,6 +8,8 @@ import { ChunkManager } from './core/world/ChunkManager';
 import { ChunkStreamer } from './core/world/ChunkStreamer';
 import { InputManager } from './core/input/InputManager';
 import { ThirdPersonController } from './core/player/ThirdPersonController';
+import { BlockFactory } from './core/blocks/BlockFactory';
+import { defaultBlockTypes } from '../shared/types/BlockTypes';
 
 function VoxelGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -306,10 +308,15 @@ function VoxelGame() {
       scene,
       terrain,
       defaultGameConfig.chunk,
-      defaultGameConfig.render
+      defaultGameConfig.render,
+      defaultBlockTypes
     );
+    
+    // Create block factory for placing individual blocks
+    const blockFactory = new BlockFactory(defaultBlockTypes);
+    
     // Generate central chunk; follow-ups can stream adjacent chunks
-    chunkManager.ensureChunk(0, 0);
+    void chunkManager.ensureChunk(0, 0);
     const streamer = new ChunkStreamer(
       chunkManager,
       defaultGameConfig.chunk.sizeX,
@@ -364,58 +371,47 @@ function VoxelGame() {
       }
     }
 
-    function placeBlock(x: number, y: number, z: number, blockType: string, opts?: { color?: string; persist?: boolean }) {
+    async function placeBlock(x: number, y: number, z: number, blockType: string, opts?: { color?: string; persist?: boolean }) {
       addDebugLog(`placeBlock called: ${x}, ${y}, ${z}, isPostCreator: ${isPostCreatorRef.current}`);
       
       const key = getBlockKey(x, y, z);
-      const colors = {
-        grass: '#4a7c59',
-        stone: '#8a8a8a',
-        wood: '#8b4513',
-        sand: '#f4e4bc',
-        water: '#4a90e2'
-      };
       
-      const color = opts?.color || colors[blockType as keyof typeof colors] || colors.grass;
+      // Get block type info for fallback color
+      const blockTypeInfo = defaultBlockTypes[blockType];
+      const fallbackColor = blockTypeInfo?.fallbackColor || '#4a7c59';
+      const color = opts?.color || fallbackColor;
       
       voxelDataRef.current.set(key, { x, y, z, color });
       
-      // Create visual block
-      const geometry = new THREE.BoxGeometry(1, 1, 1);
-      const material = new THREE.MeshLambertMaterial({ color });
-      const block = new THREE.Mesh(geometry, material);
-      block.position.set(x, y, z);
-      block.userData = { key, isPlaced: true };
-      scene.add(block);
-      placedMeshes.push(block);
-      
-      // Add collision outline if enabled
-      if (defaultGameConfig.render.showCollisionOutlines) {
-        const edges = new THREE.EdgesGeometry(geometry);
-        const outline = new THREE.LineSegments(
-          edges,
-          new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 }) // Green outline for placed blocks
-        );
-        outline.position.copy(block.position);
-        scene.add(outline);
-        placedOutlines.push(outline);
+      try {
+        // Create visual block using block factory
+        const position = new THREE.Vector3(x, y, z);
+        const result = await blockFactory.createBlock(blockType, position, {
+          showCollisionOutlines: defaultGameConfig.render.showCollisionOutlines,
+          collisionOutlineColor: 0x00ff00
+        });
         
-        // Add collision box visualization (red wireframe)
-        const collisionBoxGeo = new THREE.BoxGeometry(1, 1, 1);
-        const collisionBoxEdges = new THREE.EdgesGeometry(collisionBoxGeo);
-        const collisionBox = new THREE.LineSegments(
-          collisionBoxEdges,
-          new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3, transparent: true, opacity: 0.8 })
-        );
-        collisionBox.position.copy(block.position);
-        scene.add(collisionBox);
-        placedCollisionBoxes.push(collisionBox);
-      }
-      
-      addDebugLog(`Block created and added to scene at ${x}, ${y}, ${z}`);
+        const block = result.mesh;
+        block.userData = { key, isPlaced: true };
+        scene.add(block);
+        placedMeshes.push(block);
+        
+        // Add collision outlines if they exist
+        if (result.collisionOutlines) {
+          result.collisionOutlines.forEach(outline => {
+            scene.add(outline);
+            placedOutlines.push(outline);
+          });
+        }
+        
+        addDebugLog(`Block created and added to scene at ${x}, ${y}, ${z}`);
 
-      if (opts?.persist !== false) {
-        void persistAddBlock(x, y, z, blockType, color);
+        if (opts?.persist !== false) {
+          void persistAddBlock(x, y, z, blockType, color);
+        }
+      } catch (error) {
+        console.error('Failed to create block:', error);
+        addDebugLog(`Failed to create block at ${x}, ${y}, ${z}: ${error}`);
       }
     }
 
@@ -1049,7 +1045,7 @@ function VoxelGame() {
       const delta = Math.min(0.05, clock.getDelta());
       updatePhysics(delta);
       // Stream chunks around player base
-      streamer.ensureAroundWorld(controller.playerBase.x, controller.playerBase.z);
+      void streamer.ensureAroundWorld(controller.playerBase.x, controller.playerBase.z);
       renderer.render(scene, camera);
     }
     
