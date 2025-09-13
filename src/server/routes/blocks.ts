@@ -1,6 +1,7 @@
 import type { Router } from 'express';
-import { context, redis } from '@devvit/web/server';
+import { context, redis, reddit } from '@devvit/web/server';
 import type { AddBlockRequest, BlocksResponse, VoxelBlock } from '../../shared/types/api';
+import type { WorldConfig } from '../../shared/types/WorldConfig';
 
 function keyFor(x: number, y: number, z: number): string {
   return `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
@@ -8,6 +9,41 @@ function keyFor(x: number, y: number, z: number): string {
 
 function getBlocksKey(postId: string): string {
   return `blocks:${postId}`;
+}
+
+function worldConfigKey(postId: string): string {
+  return `worldConfig:${postId}`;
+}
+
+async function getWorldConfig(postId: string): Promise<WorldConfig | null> {
+  try {
+    const raw = await redis.get(worldConfigKey(postId));
+    if (!raw) return null;
+    return JSON.parse(raw) as WorldConfig;
+  } catch (e) {
+    console.error('Failed to get world config', e);
+    return null;
+  }
+}
+
+async function canUserBuild(postId: string, username: string): Promise<boolean> {
+  const worldConfig = await getWorldConfig(postId);
+  if (!worldConfig) {
+    // If no world config, allow building (backward compatibility)
+    return true;
+  }
+  
+  // If building permission is public, anyone can build
+  if (worldConfig.buildingPermission === 'public') {
+    return true;
+  }
+  
+  // If restricted, only owner and builders can build
+  if (worldConfig.buildingPermission === 'restricted') {
+    return worldConfig.owner === username || worldConfig.builders.includes(username);
+  }
+  
+  return false;
 }
 
 async function getBlocksFromRedis(postId: string): Promise<VoxelBlock[]> {
@@ -91,6 +127,15 @@ export function mountBlocksRoutes(router: Router): void {
       res.status(400).json({ status: 'error', message: 'x,y,z are required' });
       return;
     }
+    
+    // Check building permissions
+    const username = await reddit.getCurrentUsername() ?? 'anonymous';
+    const canBuild = await canUserBuild(postId, username);
+    if (!canBuild) {
+      res.status(403).json({ status: 'error', message: 'You do not have permission to build in this world' });
+      return;
+    }
+    
     try {
       const existingBlocks = await getBlocksFromRedis(postId);
       const map = new Map<string, VoxelBlock>();
@@ -121,6 +166,15 @@ export function mountBlocksRoutes(router: Router): void {
       res.status(400).json({ status: 'error', message: 'x,y,z are required' });
       return;
     }
+    
+    // Check building permissions
+    const username = await reddit.getCurrentUsername() ?? 'anonymous';
+    const canBuild = await canUserBuild(postId, username);
+    if (!canBuild) {
+      res.status(403).json({ status: 'error', message: 'You do not have permission to build in this world' });
+      return;
+    }
+    
     try {
       const existingBlocks = await getBlocksFromRedis(postId);
       const map = new Map<string, VoxelBlock>();

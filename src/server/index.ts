@@ -137,8 +137,15 @@ router.post('/internal/menu/start-world-create', async (_req, res): Promise<void
         name: 'worldConfigCreateForm',
         form: {
           title: 'Create Voxel World',
-          description: 'Choose a terrain preset and optional seed. Immutable after creation.',
+          description: 'Configure your world settings. World name will be the post title.',
           fields: [
+            {
+              type: 'string',
+              name: 'worldName',
+              label: 'World Name',
+              helpText: 'This will be displayed as the post title',
+              required: true,
+            },
             {
               type: 'select',
               name: 'terrainType',
@@ -157,8 +164,25 @@ router.post('/internal/menu/start-world-create', async (_req, res): Promise<void
               label: 'Seed (optional)',
               helpText: 'Leave blank for a random seed. Numbers or strings accepted.',
             },
+            {
+              type: 'select',
+              name: 'buildingPermission',
+              label: 'Building Permission',
+              options: [
+                { label: 'Public - Anyone can build', value: 'public' },
+                { label: 'Restricted - Only owner and builders can build', value: 'restricted' },
+              ],
+              required: true,
+              defaultValue: ['public'],
+            },
+            {
+              type: 'string',
+              name: 'builders',
+              label: 'Builders (comma-separated usernames)',
+              helpText: 'Only used when building permission is set to restricted. Leave empty to only allow the owner to build.',
+            },
           ],
-          acceptLabel: 'Create',
+          acceptLabel: 'Create World',
           cancelLabel: 'Cancel',
         },
       },
@@ -188,15 +212,37 @@ function hashToInt32(input: string): number {
 router.post('/internal/form/world-config-create', async (req, res): Promise<void> => {
   try {
     const { postId } = context;
+    const worldName = String(((req.body as any)?.worldName ?? '')).trim();
     const terrainType = ((req.body as any)?.terrainType?.[0] ?? 'greenery') as TerrainType;
     const seedRaw = String(((req.body as any)?.seed ?? '')).trim();
+    const buildingPermission = ((req.body as any)?.buildingPermission?.[0] ?? 'public') as 'public' | 'restricted';
+    const buildersRaw = String(((req.body as any)?.builders ?? '')).trim();
+    
+    if (!worldName) {
+      res.json({ showToast: 'World name is required' });
+      return;
+    }
+    
     const numericSeed = seedRaw
       ? Number.isFinite(Number(seedRaw))
         ? Math.floor(Number(seedRaw))
         : hashToInt32(seedRaw)
       : Math.floor(Math.random() * 2147483647);
 
-    const config: WorldConfig = { terrainType, seed: numericSeed };
+    // Parse builders list
+    const builders = buildersRaw
+      ? buildersRaw.split(',').map(b => b.trim()).filter(b => b.length > 0)
+      : [];
+
+    const username = await reddit.getCurrentUsername() ?? 'anonymous';
+    const config: WorldConfig = { 
+      terrainType, 
+      seed: numericSeed, 
+      worldName,
+      buildingPermission,
+      builders,
+      owner: username
+    };
 
     // If invoked from a post menu, we have postId → save for that post
     if (postId) {
@@ -206,15 +252,15 @@ router.post('/internal/form/world-config-create', async (req, res): Promise<void
         return;
       }
       await redis.set(worldConfigKey(postId), JSON.stringify(config));
-      res.json({ showToast: `World created: ${terrainType} (${numericSeed})` });
+      res.json({ showToast: `World created: ${worldName} (${terrainType})` });
       return;
     }
 
     // If invoked from subreddit menu (no postId), create a post first
-    const post = await createPost(config);
+    const post = await createPost(config, worldName);
     await redis.set(worldConfigKey(post.id), JSON.stringify(config));
     res.json({
-      showToast: `World created: ${terrainType} (${numericSeed})`,
+      showToast: `World created: ${worldName} (${terrainType})`,
       navigateTo: `https://reddit.com/r/${context.subredditName}/comments/${post.id}`,
     });
   } catch (e) {
@@ -241,6 +287,78 @@ router.get('/api/world-config', async (_req, res): Promise<void> => {
   } catch (e) {
     console.error('Failed to read world config', e);
     res.status(500).json({ status: 'error', message: 'Failed to read world config' });
+  }
+});
+
+// Check if user can build in this world
+router.get('/api/can-build', async (_req, res): Promise<void> => {
+  const { postId } = context;
+  if (!postId) {
+    res.status(400).json({ status: 'error', message: 'postId is required' });
+    return;
+  }
+  try {
+    const username = await reddit.getCurrentUsername() ?? 'anonymous';
+    const raw = await redis.get(worldConfigKey(postId));
+    if (!raw) {
+      res.json({ canBuild: true }); // Backward compatibility
+      return;
+    }
+    const cfg = JSON.parse(raw) as WorldConfig;
+    
+    let canBuild = false;
+    if (cfg.buildingPermission === 'public') {
+      canBuild = true;
+    } else if (cfg.buildingPermission === 'restricted') {
+      canBuild = cfg.owner === username || cfg.builders.includes(username);
+    }
+    
+    res.json({ canBuild, isOwner: cfg.owner === username });
+  } catch (e) {
+    console.error('Failed to check build permission', e);
+    res.status(500).json({ status: 'error', message: 'Failed to check build permission' });
+  }
+});
+
+// Update builders list (owner only)
+router.post('/api/update-builders', async (req, res): Promise<void> => {
+  const { postId } = context;
+  if (!postId) {
+    res.status(400).json({ status: 'error', message: 'postId is required' });
+    return;
+  }
+  try {
+    const username = await reddit.getCurrentUsername() ?? 'anonymous';
+    const raw = await redis.get(worldConfigKey(postId));
+    if (!raw) {
+      res.status(404).json({ status: 'error', message: 'world config not found' });
+      return;
+    }
+    const cfg = JSON.parse(raw) as WorldConfig;
+    
+    // Only owner can update builders
+    if (cfg.owner !== username) {
+      res.status(403).json({ status: 'error', message: 'Only the world owner can update builders' });
+      return;
+    }
+    
+    const { builders } = req.body as { builders: string[] };
+    if (!Array.isArray(builders)) {
+      res.status(400).json({ status: 'error', message: 'builders must be an array' });
+      return;
+    }
+    
+    // Update the config
+    const updatedConfig: WorldConfig = {
+      ...cfg,
+      builders: builders.filter(b => typeof b === 'string' && b.trim().length > 0)
+    };
+    
+    await redis.set(worldConfigKey(postId), JSON.stringify(updatedConfig));
+    res.json({ status: 'ok', builders: updatedConfig.builders });
+  } catch (e) {
+    console.error('Failed to update builders', e);
+    res.status(500).json({ status: 'error', message: 'Failed to update builders' });
   }
 });
 

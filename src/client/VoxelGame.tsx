@@ -36,6 +36,11 @@ function VoxelGame() {
   const [isJoystickActive, setIsJoystickActive] = useState(false);
   const joystickRef = useRef<HTMLDivElement>(null);
   const [isPostCreator, setIsPostCreator] = useState(false);
+  const [canBuild, setCanBuild] = useState(true);
+  const [isOwner, setIsOwner] = useState(false);
+  const [worldConfig, setWorldConfig] = useState<{ worldName: string; buildingPermission: 'public' | 'restricted'; builders: string[]; owner: string } | null>(null);
+  const [showBuilderManagement, setShowBuilderManagement] = useState(false);
+  const [builderInput, setBuilderInput] = useState('');
   const voxelDataRef = useRef<Map<string, { x: number; y: number; z: number; color: string }>>(new Map());
   const [selectedBlockType, setSelectedBlockType] = useState('grass');
   const [allBlockTypes, setAllBlockTypes] = useState<BlockTypeRegistry>(defaultBlockTypes);
@@ -79,6 +84,59 @@ function VoxelGame() {
     const timestamp = new Date().toLocaleTimeString();
     setDebugLogs(prev => [...prev.slice(-4), `[${timestamp}] ${message}`]);
     console.log(message);
+  };
+
+  const addBuilder = async () => {
+    if (!builderInput.trim() || !worldConfig) return;
+    
+    const newBuilder = builderInput.trim();
+    if (worldConfig.builders.includes(newBuilder)) {
+      addDebugLog('Builder already exists');
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/update-builders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ builders: [...worldConfig.builders, newBuilder] }),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setWorldConfig({ ...worldConfig, builders: data.builders });
+        setBuilderInput('');
+        addDebugLog(`Added builder: ${newBuilder}`);
+      } else {
+        const error = await res.json();
+        addDebugLog(`Failed to add builder: ${error.message}`);
+      }
+    } catch (e) {
+      addDebugLog(`Failed to add builder: ${e}`);
+    }
+  };
+
+  const removeBuilder = async (builder: string) => {
+    if (!worldConfig) return;
+    
+    try {
+      const res = await fetch('/api/update-builders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ builders: worldConfig.builders.filter(b => b !== builder) }),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setWorldConfig({ ...worldConfig, builders: data.builders });
+        addDebugLog(`Removed builder: ${builder}`);
+      } else {
+        const error = await res.json();
+        addDebugLog(`Failed to remove builder: ${error.message}`);
+      }
+    } catch (e) {
+      addDebugLog(`Failed to remove builder: ${e}`);
+    }
   };
 
   // Joystick handlers
@@ -197,15 +255,42 @@ function VoxelGame() {
     };
     checkMobile();
 
-    // Check if user is post creator (for now, always true for testing)
-    // In a real app, this would check against the actual post data
-    const checkPostCreator = () => {
-      // TODO: Replace with actual post creator check
-      setIsPostCreator(true); // For testing, everyone is a creator
-      isPostCreatorRef.current = true; // Set ref immediately
-      addDebugLog('Post creator status set to true');
+    // Load world config and check permissions
+    const loadWorldConfig = async () => {
+      try {
+        const res = await fetch('/api/world-config');
+        if (res.ok) {
+          const config = await res.json();
+          setWorldConfig(config);
+          addDebugLog(`World loaded: ${config.worldName} (${config.buildingPermission})`);
+        }
+      } catch (e) {
+        console.warn('Failed to load world config', e);
+      }
     };
-    checkPostCreator();
+
+    const checkPermissions = async () => {
+      try {
+        const res = await fetch('/api/can-build');
+        if (res.ok) {
+          const data = await res.json();
+          setCanBuild(data.canBuild);
+          setIsOwner(data.isOwner);
+          setIsPostCreator(data.canBuild); // Use canBuild for creator status
+          isPostCreatorRef.current = data.canBuild;
+          addDebugLog(`Permissions: canBuild=${data.canBuild}, isOwner=${data.isOwner}`);
+        }
+      } catch (e) {
+        console.warn('Failed to check permissions', e);
+        // Default to allowing building for backward compatibility
+        setCanBuild(true);
+        setIsPostCreator(true);
+        isPostCreatorRef.current = true;
+      }
+    };
+
+    loadWorldConfig();
+    checkPermissions();
 
     const canvas = canvasRef.current;
     
@@ -1329,23 +1414,39 @@ function VoxelGame() {
         </div>
       )}
 
-      {/* Device type indicator */}
+      {/* World info and device type indicator */}
       {!sceneError && (
         <div style={{
           position: 'absolute',
           top: '20px',
           left: '20px',
           color: 'white',
-          textAlign: 'center',
+          textAlign: 'left',
           zIndex: 1000,
           textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
           background: 'rgba(0,0,0,0.7)',
-          padding: '8px 16px',
-          borderRadius: '20px',
+          padding: '12px 16px',
+          borderRadius: '10px',
           fontSize: '14px',
-          fontWeight: 'bold'
+          fontWeight: 'bold',
+          maxWidth: '300px'
         }}>
-          {isMobile ? 'mobile' : 'PC'}
+          {worldConfig && (
+            <div style={{ marginBottom: '8px' }}>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#4CAF50' }}>
+                {worldConfig.worldName}
+              </div>
+              <div style={{ fontSize: '12px', opacity: 0.8 }}>
+                {worldConfig.buildingPermission === 'public' ? '🌍 Public' : '🔒 Restricted'}
+                {worldConfig.buildingPermission === 'restricted' && worldConfig.builders.length > 0 && (
+                  <span> • {worldConfig.builders.length} builder{worldConfig.builders.length !== 1 ? 's' : ''}</span>
+                )}
+              </div>
+            </div>
+          )}
+          <div style={{ fontSize: '12px', opacity: 0.7 }}>
+            {isMobile ? '📱 Mobile' : '💻 PC'} • {canBuild ? '✏️ Can Build' : '👀 View Only'}
+          </div>
         </div>
       )}
 
@@ -1443,7 +1544,7 @@ function VoxelGame() {
       )}
 
       {/* Desktop creator controls */}
-      {!isMobile && isPostCreator && !sceneError && (
+      {!isMobile && canBuild && !sceneError && (
         <div style={{
           position: 'absolute',
           top: '20px',
@@ -1458,6 +1559,27 @@ function VoxelGame() {
         }}>
           <h3 style={{ color: '#4CAF50', margin: '0 0 10px 0' }}>✏️ Creator Mode</h3>
           <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>Left click: Remove block<br/>Right click: Place block</p>
+          
+          {isOwner && worldConfig && (
+            <div style={{ marginBottom: '10px' }}>
+              <button
+                onClick={() => setShowBuilderManagement(true)}
+                style={{
+                  padding: '6px 12px',
+                  background: '#FF9800',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  width: '100%'
+                }}
+              >
+                👥 Manage Builders ({worldConfig.builders.length})
+              </button>
+            </div>
+          )}
           
           <div style={{ marginBottom: '10px' }}>
             <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Block Type:</label>
@@ -1543,7 +1665,7 @@ function VoxelGame() {
       )}
 
       {/* Mobile creator controls */}
-      {isMobile && isPostCreator && !sceneError && (
+      {isMobile && canBuild && !sceneError && (
         <div style={{
           position: 'absolute',
           top: '80px',
@@ -1947,8 +2069,169 @@ function VoxelGame() {
           </div>
         </>
       )}
+
+      {/* Builder Management Modal */}
+      {showBuilderManagement && worldConfig && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0,0,0,0.7)',
+          zIndex: 2000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '500px',
+            background: '#111',
+            color: 'white',
+            borderRadius: '10px',
+            padding: '20px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+          }}>
+            <h3 style={{ marginTop: 0, marginBottom: '20px' }}>
+              👥 Manage Builders - {worldConfig.worldName}
+            </h3>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '14px', marginBottom: '10px', opacity: 0.8 }}>
+                Building Permission: <strong>{worldConfig.buildingPermission === 'public' ? '🌍 Public' : '🔒 Restricted'}</strong>
+              </div>
+              <div style={{ fontSize: '12px', marginBottom: '15px', opacity: 0.7 }}>
+                {worldConfig.buildingPermission === 'public' 
+                  ? 'Anyone can build in this world'
+                  : 'Only the owner and builders can build in this world'
+                }
+              </div>
+            </div>
+
+            {worldConfig.buildingPermission === 'restricted' && (
+              <>
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
+                    Add Builder:
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      value={builderInput}
+                      onChange={(e) => setBuilderInput(e.target.value)}
+                      placeholder="Enter username..."
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        borderRadius: '5px',
+                        border: '1px solid #555',
+                        background: '#222',
+                        color: 'white',
+                        fontSize: '14px'
+                      }}
+                      onKeyPress={(e) => e.key === 'Enter' && addBuilder()}
+                    />
+                    <button
+                      onClick={addBuilder}
+                      disabled={!builderInput.trim()}
+                      style={{
+                        padding: '8px 16px',
+                        background: builderInput.trim() ? '#4CAF50' : '#666',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: builderInput.trim() ? 'pointer' : 'not-allowed',
+                        fontSize: '14px',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '14px', marginBottom: '10px' }}>
+                    Current Builders ({worldConfig.builders.length}):
+                  </div>
+                  {worldConfig.builders.length === 0 ? (
+                    <div style={{ 
+                      padding: '10px', 
+                      background: 'rgba(255,255,255,0.1)', 
+                      borderRadius: '5px',
+                      fontSize: '12px',
+                      opacity: 0.7,
+                      textAlign: 'center'
+                    }}>
+                      No builders added yet
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                      {worldConfig.builders.map((builder, index) => (
+                        <div
+                          key={index}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '8px',
+                            background: 'rgba(255,255,255,0.1)',
+                            borderRadius: '5px',
+                            marginBottom: '5px'
+                          }}
+                        >
+                          <span style={{ fontSize: '14px' }}>👤 {builder}</span>
+                          <button
+                            onClick={() => removeBuilder(builder)}
+                            style={{
+                              padding: '4px 8px',
+                              background: '#f44336',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '3px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowBuilderManagement(false)}
+                style={{
+                  padding: '10px 20px',
+                  background: '#666',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
-      {!sceneError && <canvas ref={canvasRef} style={{ display: 'block' }} />}
+      {!sceneError && <canvas ref={canvasRef} style={{ 
+        display: 'block', 
+        width: '100%', 
+        height: '100%',
+        position: 'absolute',
+        top: 0,
+        left: 0
+      }} />}
     </div>
   );
 }

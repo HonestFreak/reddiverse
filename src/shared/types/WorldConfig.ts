@@ -5,6 +5,10 @@ export type TerrainType = 'greenery' | 'desert' | 'mountains';
 export type WorldConfig = {
   seed: number;
   terrainType: TerrainType;
+  worldName: string;
+  buildingPermission: 'public' | 'restricted';
+  builders: string[];
+  owner: string;
 };
 
 export type FoliageType =
