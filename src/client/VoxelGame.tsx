@@ -499,20 +499,22 @@ function VoxelGame() {
               const face = intersected.face;
               if (face) {
                 const normal = face.normal.clone();
+                // Transform normal to world space for all objects
+                normal.transformDirection(block.matrixWorld);
                 let base: THREE.Vector3;
-                
-                if (isGround) {
+                let offsetScalar = 1.0;
+
+                if (isGround || isTerrain) {
+                  // Use the intersection point for ground/terrain and half-block offset
                   base = intersected.point.clone();
-                } else if (isTerrain) {
-                  // For terrain, use the intersection point directly
-                  base = intersected.point.clone();
+                  offsetScalar = 0.5;
                 } else {
-                  // For placed blocks, use block position
-                  base = block.position.clone();
-                  normal.transformDirection(block.matrixWorld);
+                  // For placed blocks, use block center position and full-block offset
+                  base = (block as THREE.Mesh).position.clone();
+                  offsetScalar = 1.0;
                 }
-                
-                const newPos = base.add(normal);
+
+                const newPos = base.add(normal.multiplyScalar(offsetScalar));
                 addDebugLog(`Placing block at ${Math.round(newPos.x)}, ${Math.round(newPos.y)}, ${Math.round(newPos.z)}`);
                 placeBlock(Math.round(newPos.x), Math.round(newPos.y), Math.round(newPos.z), selectedBlockTypeRef.current);
               }
@@ -527,20 +529,22 @@ function VoxelGame() {
             const face = intersected.face;
             if (face) {
               const normal = face.normal.clone();
+              // Transform normal to world space for all objects
+              normal.transformDirection(block.matrixWorld);
               let base: THREE.Vector3;
-              
-              if (isGround) {
+              let offsetScalar = 1.0;
+
+              if (isGround || isTerrain) {
+                // Use the intersection point for ground/terrain and half-block offset
                 base = intersected.point.clone();
-              } else if (isTerrain) {
-                // For terrain, use the intersection point directly
-                base = intersected.point.clone();
+                offsetScalar = 0.5;
               } else {
-                // For placed blocks, use block position
-                base = block.position.clone();
-                normal.transformDirection(block.matrixWorld);
+                // For placed blocks, use block center position and full-block offset
+                base = (block as THREE.Mesh).position.clone();
+                offsetScalar = 1.0;
               }
-              
-              const newPos = base.add(normal);
+
+              const newPos = base.add(normal.multiplyScalar(offsetScalar));
               addDebugLog(`Touch placing block at ${Math.round(newPos.x)}, ${Math.round(newPos.y)}, ${Math.round(newPos.z)}`);
               placeBlock(Math.round(newPos.x), Math.round(newPos.y), Math.round(newPos.z), selectedBlockTypeRef.current);
             }
