@@ -82,7 +82,7 @@ export class TextureManager {
         const material = new THREE.MeshLambertMaterial({
           color: texture.value,
           transparent: true,
-          opacity: 0.35,
+          opacity: 0.20,
           depthWrite: false,
           side: THREE.FrontSide,
         });

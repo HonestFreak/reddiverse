@@ -14,6 +14,10 @@ export class TerrainGenerator {
     return this.config.seed;
   }
 
+  getMaxHeight(): number {
+    return this.config.heightScale;
+  }
+
   private fbm(nx: number, nz: number): number {
     const { octaves, persistence, lacunarity, useRidged } = this.config;
     let amplitude = 1.0;

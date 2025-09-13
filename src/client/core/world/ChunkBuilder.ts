@@ -95,3 +95,36 @@ export async function buildSnowOverlayInstancedMesh(
   if (instances.length === 0) return null;
   return await blockFactory.createInstancedBlock(snowBlockTypeId, instances, { showCollisionOutlines: render.showCollisionOutlines });
 }
+
+export async function buildWaterOverlayInstancedMesh(
+  chunk: ChunkData,
+  render: RenderConfig,
+  blockFactory: BlockFactory,
+  seaLevel: number
+): Promise<BuildResult | null> {
+  const { sizeX, sizeZ, blockSize, heights } = chunk;
+
+  const instances: Array<{ position: THREE.Vector3; matrix: THREE.Matrix4 }> = [];
+  for (let z = 0; z < sizeZ; z++) {
+    for (let x = 0; x < sizeX; x++) {
+      const h = heights[indexOf(x, z, sizeX)] ?? 0;
+      // If terrain height is below sea level, fill vertical water column from just above ground up to sea level
+      if (h < seaLevel) {
+        const startY = Math.max(1, h + 1);
+        for (let y = startY; y <= seaLevel; y++) {
+          const position = new THREE.Vector3(
+            (x - Math.floor(sizeX / 2)) * blockSize,
+            y * blockSize,
+            (z - Math.floor(sizeZ / 2)) * blockSize
+          );
+          const matrix = new THREE.Matrix4();
+          matrix.setPosition(position);
+          instances.push({ position, matrix });
+        }
+      }
+    }
+  }
+
+  if (instances.length === 0) return null;
+  return await blockFactory.createInstancedBlock('water', instances, { showCollisionOutlines: render.showCollisionOutlines });
+}

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TerrainGenerator } from '../../../shared/core/terrain/TerrainGenerator';
 import { ChunkConfig, RenderConfig } from '../../../shared/config/gameConfig';
 import { ChunkData, chunkKey, ChunkKey, indexOf } from './ChunkTypes';
-import { buildSurfaceInstancedMesh, buildSnowOverlayInstancedMesh } from './ChunkBuilder';
+import { buildSurfaceInstancedMesh, buildSnowOverlayInstancedMesh, buildWaterOverlayInstancedMesh } from './ChunkBuilder';
 import { Perlin2D } from '../../../shared/core/noise/Perlin';
 import { BlockFactory } from '../blocks/BlockFactory';
 import { BlockTypeRegistry } from '../../../shared/types/BlockTypes';
@@ -20,6 +20,7 @@ export class ChunkManager {
 
   private chunks: Map<ChunkKey, { data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments | undefined; snowMesh?: THREE.InstancedMesh | undefined; foliageMeshes?: THREE.InstancedMesh[] | undefined; foliageCells?: Set<string> | undefined }>; 
   private snowOverlay: { threshold: number; depth: number; blockId: string } | undefined;
+  private waterMeshes: Map<ChunkKey, THREE.InstancedMesh> = new Map();
 
   constructor(
     scene: THREE.Scene,
@@ -42,7 +43,7 @@ export class ChunkManager {
     this.foliageNoise = new Perlin2D((seed + 1013904223) >>> 0);
   }
 
-  async generateChunk(cx: number, cz: number): Promise<{ data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments | undefined; snowMesh?: THREE.InstancedMesh | undefined; foliageMeshes?: THREE.InstancedMesh[] | undefined; foliageCells?: Set<string> | undefined }> {
+  async generateChunk(cx: number, cz: number): Promise<{ data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments | undefined; snowMesh?: THREE.InstancedMesh | undefined; foliageMeshes?: THREE.InstancedMesh[] | undefined; foliageCells?: Set<string> | undefined; waterMesh?: THREE.InstancedMesh | undefined }> {
     const { sizeX, sizeZ, blockSize } = this.chunkConfig;
     const heights = new Uint8Array(sizeX * sizeZ);
 
@@ -212,12 +213,36 @@ export class ChunkManager {
         }
       }
     }
+
+    // Optional water overlay for greenery terrain up to sea level
+    let waterMesh: THREE.InstancedMesh | undefined = undefined;
+    try {
+      const isGreen = this.surfaceBlockId === 'grass';
+      if (isGreen) {
+        // Sea level at ~30% of max height (tweakable)
+        const seaLevel = 9;
+        const waterOverlay = await buildWaterOverlayInstancedMesh(
+          data,
+          this.renderConfig,
+          this.blockFactory,
+          seaLevel
+        );
+        if (waterOverlay) {
+          waterOverlay.mesh.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
+          this.scene.add(waterOverlay.mesh);
+          waterMesh = waterOverlay.mesh;
+          this.waterMeshes.set(chunkKey(cx, cz), waterOverlay.mesh);
+        }
+      }
+    } catch (e) {
+      console.warn('water generation failed', e);
+    }
     
     // Merge foliage cells into global set for fast reads each frame
     if (foliageCells) {
       for (const c of foliageCells) this.foliageCellsGlobal.add(c);
     }
-    return { data, mesh, outline, snowMesh, foliageMeshes, foliageCells };
+    return { data, mesh, outline, snowMesh, foliageMeshes, foliageCells, waterMesh };
   }
 
   async ensureChunk(cx: number, cz: number): Promise<void> {
@@ -238,6 +263,7 @@ export class ChunkManager {
       if (c.snowMesh) result.push(c.snowMesh);
       if (c.foliageMeshes) result.push(...c.foliageMeshes);
     }
+    for (const wm of this.waterMeshes.values()) result.push(wm);
     return result;
   }
 }
