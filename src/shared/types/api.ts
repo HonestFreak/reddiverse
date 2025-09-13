@@ -69,3 +69,9 @@ export type RemoveBlockRequest = {
   y: number;
   z: number;
 };
+
+// Server forms: declare names for reference
+export type ServerForms = {
+  worldConfigCreateForm: string;
+  smartBlockCreateForm: string;
+};

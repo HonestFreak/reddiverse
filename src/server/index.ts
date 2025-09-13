@@ -1,10 +1,12 @@
 import express from 'express';
-import { InitResponse, IncrementResponse, DecrementResponse, PlayerPosition, GameRealtimeMessage, VoxelBlock, AddBlockRequest, RemoveBlockRequest, BlocksResponse } from '../shared/types/api';
+import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
 import type { WorldConfig, TerrainType } from '../shared/types/WorldConfig';
-import { redis, reddit, createServer, context, getServerPort, realtime } from '@devvit/web/server';
+import { redis, reddit, createServer, context, getServerPort } from '@devvit/web/server';
 import { createPost } from './core/post';
 import { mountPresenceRoutes } from './routes/presence';
 import { mountBlocksRoutes } from './routes/blocks';
+import { mountSmartBlocksRoutes } from './routes/smartBlocks';
+import { mountPlayerStateRoutes } from './routes/playerState';
 
 const app = express();
 
@@ -248,36 +250,8 @@ const server = createServer(app);
 server.on('error', (err) => console.error(`server error; ${err.stack}`));
 server.listen(getServerPort());
 
-// Multiplayer realtime endpoints
-type PresenceMap = Record<string, PlayerPosition>;
-
-function presenceKey(postId: string): string {
-  return `presence:${postId}`;
-}
-
-async function readPresence(postId: string): Promise<PresenceMap> {
-  try {
-    const raw = await redis.get(presenceKey(postId));
-    if (!raw) return {};
-    return JSON.parse(raw) as PresenceMap;
-  } catch (e) {
-    console.error('Failed to read presence from redis', e);
-    return {};
-  }
-}
-
-async function writePresence(postId: string, presence: PresenceMap): Promise<void> {
-  try {
-    await redis.set(presenceKey(postId), JSON.stringify(presence));
-  } catch (e) {
-    console.error('Failed to write presence to redis', e);
-  }
-}
-
-function channelForPost(postId: string): string {
-  return `game:${postId}`;
-}
-
 // Mount modular routes
 mountPresenceRoutes(router);
 mountBlocksRoutes(router);
+mountSmartBlocksRoutes(router);
+mountPlayerStateRoutes(router);

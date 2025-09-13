@@ -198,6 +198,13 @@ export class BlockFactory {
     return this.textureManager;
   }
 
+  setBlockTypes(blockTypes: BlockTypeRegistry): void {
+    // Update texture manager with a new registry (for dynamic smart blocks)
+    (this.textureManager as any).blockTypes = blockTypes;
+    // Clear material cache to allow new textures/colors
+    this.materialCache.clear();
+  }
+
   async preloadBlockType(blockTypeId: string): Promise<void> {
     return this.textureManager.preloadBlockType(blockTypeId);
   }

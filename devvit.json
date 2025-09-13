@@ -30,6 +30,7 @@
         "forUserType": "moderator",
         "endpoint": "/internal/menu/start-world-create"
       }
+      
     ]
   },
   "triggers": {
@@ -40,7 +41,8 @@
     "worldConfigCreateForm": "/internal/form/world-config-create"
   },
   "permissions": {
-    "redis": true
+    "redis": true,
+    "media": true
   },
   "dev": {
     "subreddit": "myvoxel234_dev"

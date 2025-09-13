@@ -9,7 +9,8 @@ import { ChunkStreamer } from './core/world/ChunkStreamer';
 import { InputManager } from './core/input/InputManager';
 import { ThirdPersonController } from './core/player/ThirdPersonController';
 import { BlockFactory } from './core/blocks/BlockFactory';
-import { defaultBlockTypes } from '../shared/types/BlockTypes';
+import { defaultBlockTypes, type BlockTypeRegistry } from '../shared/types/BlockTypes';
+import type { SmartBlocksResponse, SmartBlockDefinition } from '../shared/types/SmartBlocks';
 import { getTerrainParamsForPreset, presetSurfaceBlockId } from '../shared/types/WorldConfig';
 import { SpecialBlocksManager } from './core/blocks/special/SpecialBlocksManager';
 import { LightBlock } from './core/blocks/special/LightBlock';
@@ -37,6 +38,21 @@ function VoxelGame() {
   const [isPostCreator, setIsPostCreator] = useState(false);
   const voxelDataRef = useRef<Map<string, { x: number; y: number; z: number; color: string }>>(new Map());
   const [selectedBlockType, setSelectedBlockType] = useState('grass');
+  const [allBlockTypes, setAllBlockTypes] = useState<BlockTypeRegistry>(defaultBlockTypes);
+  const smartDefsRef = useRef<SmartBlockDefinition[]>([]);
+  const [showSmartCreate, setShowSmartCreate] = useState(false);
+  const [playerState, setPlayerState] = useState({ life: 100, isWinner: false, badge: '' });
+  const [smartCreateStatus, setSmartCreateStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+  const [smartForm, setSmartForm] = useState<{
+    name: string;
+    side: { type: 'color' | 'image'; value: string } | null;
+    top: { type: 'color' | 'image'; value: string } | null;
+    bottom: { type: 'color' | 'image'; value: string } | null;
+    onClick: string;
+    onTouch: string;
+  }>({ name: '', side: null, top: null, bottom: null, onClick: '', onTouch: '' });
+  const blockFactoryRef = useRef<BlockFactory | null>(null);
+  const specialManagerRef = useRef<SpecialBlocksManager | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const selectedBlockTypeRef = useRef(selectedBlockType);
@@ -333,13 +349,14 @@ function VoxelGame() {
       terrain,
       defaultGameConfig.chunk,
       defaultGameConfig.render,
-      defaultBlockTypes,
+      allBlockTypes,
       surfaceBlockId,
       snowOverlayCfg
     );
     
     // Create block factory for placing individual blocks
-    const blockFactory = new BlockFactory(defaultBlockTypes);
+    const blockFactory = new BlockFactory(allBlockTypes);
+    blockFactoryRef.current = blockFactory;
     
     // Generate central chunk; follow-ups can stream adjacent chunks
     void chunkManager.ensureChunk(0, 0);
@@ -544,11 +561,13 @@ function VoxelGame() {
       },
     };
     specialManager = new SpecialBlocksManager(specialCtx);
+    specialManagerRef.current = specialManager;
     specialManager.register('light', (ctx, _mesh) => new LightBlock(ctx));
     specialManager.register('jumper', (ctx, _mesh) => new JumperBlock(ctx));
     specialManager.register('water', (ctx, _mesh) => new WaterBlock(ctx));
+    // Smart blocks will be registered dynamically below
 
-    function handleBlockInteraction(event: MouseEvent | TouchEvent) {
+    async function handleBlockInteraction(event: MouseEvent | TouchEvent) {
       addDebugLog(`Click detected - isPostCreator: ${isPostCreatorRef.current}`);
       
       const canvas = canvasRef.current;
@@ -639,6 +658,16 @@ function VoxelGame() {
               const newPos = base.add(normal.multiplyScalar(offsetScalar));
               addDebugLog(`Touch placing block at ${Math.round(newPos.x)}, ${Math.round(newPos.y)}, ${Math.round(newPos.z)}`);
               placeBlock(Math.round(newPos.x), Math.round(newPos.y), Math.round(newPos.z), selectedBlockTypeRef.current);
+            }
+          }
+          // Trigger onClick for smart block if the target is a placed smart block
+          if (!isTerrain) {
+            const typeId = (block as any).userData?.blockType as string | undefined;
+            if (typeId && smartDefsRef.current.some((d) => d.id === typeId)) {
+              const inst = (specialManager as any)?.instances?.get((block as any).uuid);
+              if (inst && typeof inst.click === 'function') {
+                await inst.click();
+              }
             }
           }
         }
@@ -938,6 +967,7 @@ function VoxelGame() {
     let posInterval: number | null = null;
     let presencePollInterval: number | null = null;
     let blocksPollInterval: number | null = null;
+    let playerStatePollInterval: number | null = null;
 
     function hashColorFromString(str: string): number {
       let hash = 0;
@@ -1154,6 +1184,56 @@ function VoxelGame() {
     void loadPersistedBlocks();
     blocksPollInterval = window.setInterval(() => { void loadPersistedBlocks(); }, 3000);
 
+    // Set up player state polling
+    playerStatePollInterval = window.setInterval(() => { void loadPlayerState(); }, 1000);
+
+    // Load smart blocks defs then realtime
+    async function loadSmartBlocks(): Promise<void> {
+      try {
+        const res = await fetch('/api/smart-blocks');
+        if (!res.ok) return;
+        const data = (await res.json()) as SmartBlocksResponse;
+        const defs = data.blocks ?? [];
+        smartDefsRef.current = defs;
+        // Merge into block types registry for textures
+        const merged: BlockTypeRegistry = { ...defaultBlockTypes };
+        for (const d of defs) {
+          merged[d.id] = {
+            id: d.id,
+            name: d.name,
+            textures: d.textures as any,
+            fallbackColor: '#cccccc',
+          };
+        }
+        setAllBlockTypes(merged);
+        blockFactory.setBlockTypes(merged);
+        // Register smart specials
+        const { SmartSpecialBlock } = await import('./core/blocks/special/SmartSpecialBlock');
+        for (const d of defs) {
+          console.log(`Registering smart block behavior: ${d.id}`);
+          specialManager?.register(d.id, (ctx, _mesh) => new SmartSpecialBlock(ctx, d));
+        }
+      } catch (e) {
+        console.warn('loadSmartBlocks failed', e);
+      }
+    }
+
+    // Load player state
+    async function loadPlayerState(): Promise<void> {
+      try {
+        const res = await fetch('/api/player-state');
+        if (res.ok) {
+          const state = await res.json();
+          setPlayerState(state);
+        }
+      } catch (e) {
+        console.warn('loadPlayerState failed', e);
+      }
+    }
+
+    await loadSmartBlocks();
+    await loadPlayerState();
+
     // Initialize realtime multiplayer (postId/username + presence + realtime)
     initRealtime();
 
@@ -1205,6 +1285,7 @@ function VoxelGame() {
       if (posInterval) window.clearInterval(posInterval);
       if (presencePollInterval) window.clearInterval(presencePollInterval);
       if (blocksPollInterval) window.clearInterval(blocksPollInterval);
+      if (playerStatePollInterval) window.clearInterval(playerStatePollInterval);
       if (realtimeConnection) realtimeConnection.disconnect().catch(() => {});
       input.detach();
     };
@@ -1323,6 +1404,15 @@ function VoxelGame() {
           <p>Touch and drag to look • Use joystick to move and rotate</p>
           {isPostCreator && <p style={{ color: '#4CAF50', fontWeight: 'bold' }}>✏️ Creator Mode - Tap blocks to edit</p>}
           
+          {/* Player State Display */}
+          <div style={{ fontSize: '14px', marginTop: '8px', padding: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '5px' }}>
+            <div style={{ color: playerState.life > 50 ? '#4CAF50' : playerState.life > 20 ? '#FF9800' : '#f44336' }}>
+              ❤️ Life: {playerState.life}/100
+            </div>
+            {playerState.isWinner && <div style={{ color: '#FFD700', fontWeight: 'bold' }}>🏆 Winner!</div>}
+            {playerState.badge && <div style={{ color: '#2196F3' }}>🏅 {playerState.badge}</div>}
+          </div>
+          
           {/* Debug mobile movement state */}
           <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.7 }}>
             Movement: {mobileMoveState.forward ? 'W' : ''}{mobileMoveState.backward ? 'S' : ''}
@@ -1330,6 +1420,35 @@ function VoxelGame() {
             {!mobileMoveState.forward && !mobileMoveState.backward && !mobileRotationState.left && !mobileRotationState.right && 'None'}
             {mobileMoveState.sprint && ' (Sprint)'}
           </div>
+        </div>
+      )}
+
+      {/* Player State Display - Desktop */}
+      {!isMobile && !sceneError && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          left: '20px',
+          color: 'white',
+          zIndex: 1000,
+          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+          background: 'rgba(0,0,0,0.7)',
+          padding: '12px',
+          borderRadius: '8px',
+          minWidth: '180px'
+        }}>
+          <h4 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>Player Status</h4>
+          <div style={{ fontSize: '14px', marginBottom: '4px' }}>
+            <span style={{ color: playerState.life > 50 ? '#4CAF50' : playerState.life > 20 ? '#FF9800' : '#f44336' }}>
+              ❤️ Life: {playerState.life}/100
+            </span>
+          </div>
+          {playerState.isWinner && (
+            <div style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '14px' }}>🏆 Winner!</div>
+          )}
+          {playerState.badge && (
+            <div style={{ color: '#2196F3', fontSize: '12px' }}>🏅 {playerState.badge}</div>
+          )}
         </div>
       )}
 
@@ -1364,13 +1483,9 @@ function VoxelGame() {
                 color: 'black'
               }}
             >
-              <option value="grass">Grass</option>
-              <option value="stone">Stone</option>
-              <option value="wood">Wood</option>
-              <option value="sand">Sand</option>
-              <option value="water">Water</option>
-              <option value="light">Light</option>
-              <option value="jumper">Jumper</option>
+              {Object.values(allBlockTypes).map((bt) => (
+                <option key={bt.id} value={bt.id}>{bt.name}</option>
+              ))}
             </select>
           </div>
           
@@ -1400,6 +1515,22 @@ function VoxelGame() {
               }}
             >
               + Add Block
+            </button>
+            <button
+              onClick={() => setShowSmartCreate(true)}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                background: '#2196F3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 'bold'
+              }}
+            >
+              + Smart Block
             </button>
             <button
               onClick={() => removeBlockAtPlayerRef.current()}
@@ -1453,13 +1584,9 @@ function VoxelGame() {
                 fontSize: '12px'
               }}
             >
-              <option value="grass">Grass</option>
-              <option value="stone">Stone</option>
-              <option value="wood">Wood</option>
-              <option value="sand">Sand</option>
-              <option value="water">Water</option>
-              <option value="light">Light</option>
-              <option value="jumper">Jumper</option>
+              {Object.values(allBlockTypes).map((bt) => (
+                <option key={bt.id} value={bt.id}>{bt.name}</option>
+              ))}
             </select>
           </div>
 
@@ -1481,6 +1608,22 @@ function VoxelGame() {
               + Add
             </button>
             <button
+              onTouchStart={() => setShowSmartCreate(true)}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                background: '#2196F3',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                touchAction: 'none'
+              }}
+            >
+              + Smart
+            </button>
+            <button
               onTouchStart={() => removeBlockAtPlayerRef.current()}
               style={{
                 flex: 1,
@@ -1496,6 +1639,183 @@ function VoxelGame() {
             >
               - Remove
             </button>
+          </div>
+        </div>
+      )}
+      {showSmartCreate && !sceneError && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0,0,0,0.7)',
+          zIndex: 2000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '420px',
+            background: '#111',
+            color: 'white',
+            borderRadius: '10px',
+            padding: '16px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+          }}>
+            <h3 style={{ marginTop: 0 }}>Create Smart Block</h3>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <label>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>Name</div>
+                <input value={smartForm.name} onChange={(e) => setSmartForm({ ...smartForm, name: e.target.value })} style={{ width: '100%', padding: 6 }} />
+              </label>
+              <label>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>Side Texture (color like #ff0 or image URL)</div>
+                <input placeholder="#ff9900 or https://..." onChange={(e) => {
+                  const v = e.target.value.trim();
+                  const side = v.startsWith('#') ? { type: 'color' as const, value: v } : v ? { type: 'image' as const, value: v } : null;
+                  setSmartForm({ ...smartForm, side });
+                }} style={{ width: '100%', padding: 6 }} />
+              </label>
+              <label>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>Top Texture (optional)</div>
+                <input placeholder="#ffeeaa or https://..." onChange={(e) => {
+                  const v = e.target.value.trim();
+                  const top = v.startsWith('#') ? { type: 'color' as const, value: v } : v ? { type: 'image' as const, value: v } : null;
+                  setSmartForm({ ...smartForm, top });
+                }} style={{ width: '100%', padding: 6 }} />
+              </label>
+              <label>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>Bottom Texture (optional)</div>
+                <input placeholder="#cc7700 or https://..." onChange={(e) => {
+                  const v = e.target.value.trim();
+                  const bottom = v.startsWith('#') ? { type: 'color' as const, value: v } : v ? { type: 'image' as const, value: v } : null;
+                  setSmartForm({ ...smartForm, bottom });
+                }} style={{ width: '100%', padding: 6 }} />
+              </label>
+              <label>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>onClick Actions JSON</div>
+                <textarea value={smartForm.onClick} onChange={(e) => setSmartForm({ ...smartForm, onClick: e.target.value })} rows={3} style={{ width: '100%', padding: 6 }} />
+              </label>
+              <label>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>onTouch Actions JSON</div>
+                <textarea value={smartForm.onTouch} onChange={(e) => setSmartForm({ ...smartForm, onTouch: e.target.value })} rows={3} style={{ width: '100%', padding: 6 }} />
+              </label>
+
+              {smartCreateStatus.type && (
+                <div style={{
+                  padding: '8px',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  color: 'white',
+                  background: smartCreateStatus.type === 'success' ? '#4CAF50' : '#f44336'
+                }}>
+                  {smartCreateStatus.message}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button onClick={() => {
+                  setShowSmartCreate(false);
+                  setSmartCreateStatus({ type: null, message: '' });
+                }} style={{ flex: 1, padding: '8px 12px' }}>Cancel</button>
+                <button onClick={async () => {
+                  setSmartCreateStatus({ type: null, message: '' });
+                  try {
+                    // Validate name
+                    if (!smartForm.name.trim()) {
+                      setSmartCreateStatus({ type: 'error', message: 'Name is required' });
+                      return;
+                    }
+
+                    // Validate at least one texture
+                    if (!smartForm.side && !smartForm.top && !smartForm.bottom) {
+                      setSmartCreateStatus({ type: 'error', message: 'At least one texture (side/top/bottom) is required' });
+                      return;
+                    }
+
+                    // Parse actions
+                    let onClick, onTouch;
+                    try {
+                      onClick = smartForm.onClick.trim() ? JSON.parse(smartForm.onClick) : undefined;
+                    } catch (e) {
+                      setSmartCreateStatus({ type: 'error', message: 'Invalid onClick JSON format' });
+                      return;
+                    }
+                    try {
+                      onTouch = smartForm.onTouch.trim() ? JSON.parse(smartForm.onTouch) : undefined;
+                    } catch (e) {
+                      setSmartCreateStatus({ type: 'error', message: 'Invalid onTouch JSON format' });
+                      return;
+                    }
+
+                    setSmartCreateStatus({ type: null, message: 'Creating smart block...' });
+
+                    const res = await fetch('/api/smart-blocks/create', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: smartForm.name,
+                        textures: {
+                          ...(smartForm.side ? { side: smartForm.side } : {}),
+                          ...(smartForm.top ? { top: smartForm.top } : {}),
+                          ...(smartForm.bottom ? { bottom: smartForm.bottom } : {}),
+                        },
+                        onClick,
+                        onTouch,
+                      }),
+                    });
+
+                    if (!res.ok) {
+                      const errorData = await res.json().catch(() => ({}));
+                      setSmartCreateStatus({ type: 'error', message: `Server error: ${errorData.message || res.statusText}` });
+                      return;
+                    }
+
+                    await res.json();
+                    setSmartCreateStatus({ type: 'success', message: `Smart block "${smartForm.name}" created successfully!` });
+
+                    // Reload smart definitions and update UI
+                    try {
+                      console.log('Reloading smart blocks...');
+                      const res2 = await fetch('/api/smart-blocks');
+                      const data = (await res2.json()) as SmartBlocksResponse;
+                      const defs = data.blocks ?? [];
+                      console.log('Loaded smart blocks:', defs);
+                      smartDefsRef.current = defs;
+                      const merged: BlockTypeRegistry = { ...defaultBlockTypes };
+                      for (const d of defs) {
+                        console.log(`Adding smart block to registry: ${d.id}`, d);
+                        merged[d.id] = { id: d.id, name: d.name, textures: d.textures as any, fallbackColor: '#cccccc' };
+                      }
+                      console.log('Updated block types registry:', Object.keys(merged));
+                      setAllBlockTypes(merged);
+                      blockFactoryRef.current?.setBlockTypes(merged);
+                      const { SmartSpecialBlock } = await import('./core/blocks/special/SmartSpecialBlock');
+                      for (const d of defs) {
+                        console.log(`Registering smart block behavior: ${d.id}`);
+                        specialManagerRef.current?.register(d.id, (ctx: any, _mesh: any) => new SmartSpecialBlock(ctx, d));
+                      }
+                      setSmartCreateStatus({ type: 'success', message: `Smart block "${smartForm.name}" created and loaded!` });
+                    } catch (e) {
+                      console.error('Failed to reload smart blocks:', e);
+                      setSmartCreateStatus({ type: 'error', message: 'Created but failed to reload. Try refreshing.' });
+                    }
+
+                    // Close modal after success
+                    setTimeout(() => {
+                      setShowSmartCreate(false);
+                      setSmartCreateStatus({ type: null, message: '' });
+                    }, 2000);
+                  } catch (e) {
+                    console.warn('Create smart block failed', e);
+                    setSmartCreateStatus({ type: 'error', message: `Network error: ${e instanceof Error ? e.message : 'Unknown error'}` });
+                  }
+                }} style={{ flex: 1, padding: '8px 12px', background: '#4CAF50', color: 'white', border: 'none' }}>Create</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
