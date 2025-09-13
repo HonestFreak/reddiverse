@@ -1,4 +1,3 @@
-import React from 'react';
 import VoxelGame from './VoxelGame';
 
 function App() {
