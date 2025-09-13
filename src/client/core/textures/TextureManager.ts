@@ -77,6 +77,18 @@ export class TextureManager {
     }
 
     if (texture.type === 'color') {
+      // Allow special handling for color-based materials like water
+      if (blockTypeId === 'water') {
+        const material = new THREE.MeshLambertMaterial({
+          color: texture.value,
+          transparent: true,
+          opacity: 0.35,
+          depthWrite: false,
+          side: THREE.FrontSide,
+        });
+        this.materialCache.set(cacheKey, material);
+        return material;
+      }
       const material = this.createColorMaterial(texture.value);
       this.materialCache.set(cacheKey, material);
       return material;
@@ -89,6 +101,11 @@ export class TextureManager {
           material.transparent = true;
           material.alphaTest = 0.4;
           material.depthWrite = true; // keep correct sorting for cutouts
+          (material as THREE.MeshLambertMaterial).side = THREE.FrontSide;
+        } else if (blockTypeId === 'water') {
+          material.transparent = true;
+          material.opacity = 0.35;
+          material.depthWrite = false;
           (material as THREE.MeshLambertMaterial).side = THREE.FrontSide;
         }
         this.materialCache.set(cacheKey, material);

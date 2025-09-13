@@ -69,6 +69,26 @@ export const defaultBlockTypes: BlockTypeRegistry = {
     },
     fallbackColor: '#4a90e2'
   },
+  light: {
+    id: 'light',
+    name: 'Light',
+    textures: {
+      top: { type: 'color', value: '#fff6b3' },
+      side: { type: 'color', value: '#fff6b3' },
+      bottom: { type: 'color', value: '#fff6b3' }
+    },
+    fallbackColor: '#fff6b3'
+  },
+  jumper: {
+    id: 'jumper',
+    name: 'Jumper',
+    textures: {
+      top: { type: 'color', value: '#6a5acd' },
+      side: { type: 'color', value: '#6a5acd' },
+      bottom: { type: 'color', value: '#6a5acd' }
+    },
+    fallbackColor: '#6a5acd'
+  },
   snow: {
     id: 'snow',
     name: 'Snow',

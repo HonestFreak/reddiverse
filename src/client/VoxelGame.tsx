@@ -11,6 +11,10 @@ import { ThirdPersonController } from './core/player/ThirdPersonController';
 import { BlockFactory } from './core/blocks/BlockFactory';
 import { defaultBlockTypes } from '../shared/types/BlockTypes';
 import { getTerrainParamsForPreset, presetSurfaceBlockId } from '../shared/types/WorldConfig';
+import { SpecialBlocksManager } from './core/blocks/special/SpecialBlocksManager';
+import { LightBlock } from './core/blocks/special/LightBlock';
+import { JumperBlock } from './core/blocks/special/JumperBlock';
+import { WaterBlock } from './core/blocks/special/WaterBlock';
 
 function VoxelGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -275,6 +279,7 @@ function VoxelGame() {
     const placedMeshes: THREE.Mesh[] = [];
     const placedOutlines: THREE.LineSegments[] = [];
     const placedCollisionBoxes: THREE.LineSegments[] = [];
+    let specialManager: SpecialBlocksManager | null = null;
 
     const gravity = defaultGameConfig.controls.gravity;
     const walkSpeed = defaultGameConfig.controls.walkSpeed;
@@ -392,7 +397,13 @@ function VoxelGame() {
       }
     }
 
-    async function placeBlock(x: number, y: number, z: number, blockType: string, opts?: { color?: string; persist?: boolean }) {
+    async function placeBlock(
+      x: number,
+      y: number,
+      z: number,
+      blockType: string,
+      opts?: { color?: string; persist?: boolean; userData?: Record<string, unknown> }
+    ) {
       addDebugLog(`placeBlock called: ${x}, ${y}, ${z}, isPostCreator: ${isPostCreatorRef.current}`);
       
       const key = getBlockKey(x, y, z);
@@ -413,9 +424,10 @@ function VoxelGame() {
         });
         
         const block = result.mesh;
-        block.userData = { key, isPlaced: true };
+        block.userData = { ...(block.userData || {}), key, isPlaced: true, ...(opts?.userData || {}) };
         scene.add(block);
         placedMeshes.push(block);
+        if (specialManager) specialManager.onBlockPlaced(block, blockType);
         
         // Add collision outlines if they exist
         if (result.collisionOutlines) {
@@ -446,6 +458,7 @@ function VoxelGame() {
       // Remove visual block and its outline
       const blockToRemove = placedMeshes.find(block => block.userData.key === key);
       if (blockToRemove) {
+        if (specialManager) specialManager.onBlockRemoved(blockToRemove);
         scene.remove(blockToRemove);
         const index = placedMeshes.indexOf(blockToRemove);
         if (index > -1) placedMeshes.splice(index, 1);
@@ -475,6 +488,65 @@ function VoxelGame() {
         void persistRemoveBlock(x, y, z);
       }
     }
+
+    // Occupancy helper (for water flow and interactions)
+    function isOccupiedCell(x: number, y: number, z: number): boolean {
+      const rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+      // Placed blocks occupancy
+      for (const m of placedMeshes) {
+        if (Math.round(m.position.x) === rx && Math.round(m.position.y) === ry && Math.round(m.position.z) === rz) {
+          return true;
+        }
+      }
+      // Terrain occupancy: any cell at or below surface height
+      const h = heightAt(rx, rz);
+      if (ry <= h) return true;
+      // Foliage solid cells
+      const fc = chunkManager.getFoliageCollisionCells();
+      if (fc && fc.has(`${rx},${ry},${rz}`)) return true;
+      return false;
+    }
+
+    function isSolidCell(x: number, y: number, z: number): boolean {
+      const rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+      // Placed block solidity: water is non-solid
+      for (const m of placedMeshes) {
+        if (Math.round(m.position.x) === rx && Math.round(m.position.y) === ry && Math.round(m.position.z) === rz) {
+          return m.userData.blockType !== 'water';
+        }
+      }
+      // Terrain is solid
+      const h = heightAt(rx, rz);
+      if (ry <= h) return true;
+      // Foliage cells are solid
+      const fc = chunkManager.getFoliageCollisionCells();
+      if (fc && fc.has(`${rx},${ry},${rz}`)) return true;
+      return false;
+    }
+
+    // Initialize special blocks manager and register behaviors
+    const specialCtx = {
+      scene,
+      getPlayerBase: () => controller.playerBase,
+      getVelocity: () => velocity,
+      addUpwardImpulse: (impulse: number) => { velocity.y += impulse; },
+      heightAt: (x: number, z: number) => heightAt(x, z),
+      isOccupied: (x: number, y: number, z: number) => isOccupiedCell(x, y, z),
+      isSolid: (x: number, y: number, z: number) => isSolidCell(x, y, z),
+      placeBlock: async (x: number, y: number, z: number, type: string, extras?: { userData?: Record<string, unknown>; persist?: boolean }) => {
+        await placeBlock(x, y, z, type, { persist: extras?.persist ?? false });
+      },
+      removeBlock: (x: number, y: number, z: number) => removeBlock(x, y, z, { persist: false, force: true }),
+      persistBlock: async (x: number, y: number, z: number, type: string, color?: string) => {
+        const blockTypeInfo = defaultBlockTypes[type];
+        const fallbackColor = color || blockTypeInfo?.fallbackColor || '#4a7c59';
+        await persistAddBlock(x, y, z, type, fallbackColor);
+      },
+    };
+    specialManager = new SpecialBlocksManager(specialCtx);
+    specialManager.register('light', (ctx, _mesh) => new LightBlock(ctx));
+    specialManager.register('jumper', (ctx, _mesh) => new JumperBlock(ctx));
+    specialManager.register('water', (ctx, _mesh) => new WaterBlock(ctx));
 
     function handleBlockInteraction(event: MouseEvent | TouchEvent) {
       addDebugLog(`Click detected - isPostCreator: ${isPostCreatorRef.current}`);
@@ -829,7 +901,7 @@ function VoxelGame() {
         { gravity, walkSpeed, sprintMultiplier, damping, cameraDistance, cameraHeight, playerHeight: defaultGameConfig.controls.playerHeight, canJumpRef },
         velocity,
         heightAt,
-        placedMeshes,
+        placedMeshes.filter((m) => m.userData.blockType !== 'water'),
         streamer ? chunkManager.getFoliageCollisionCells() : undefined
       );
       // Sync back yaw/pitch for UI/inputs that still use local yaw/pitch
@@ -1069,6 +1141,7 @@ function VoxelGame() {
       requestAnimationFrame(animate);
       const delta = Math.min(0.05, clock.getDelta());
       updatePhysics(delta);
+      if (specialManager) specialManager.update(delta);
       // Stream chunks around player base
       void streamer.ensureAroundWorld(controller.playerBase.x, controller.playerBase.z);
       renderer.render(scene, camera);
@@ -1296,6 +1369,8 @@ function VoxelGame() {
               <option value="wood">Wood</option>
               <option value="sand">Sand</option>
               <option value="water">Water</option>
+              <option value="light">Light</option>
+              <option value="jumper">Jumper</option>
             </select>
           </div>
           
@@ -1383,6 +1458,8 @@ function VoxelGame() {
               <option value="wood">Wood</option>
               <option value="sand">Sand</option>
               <option value="water">Water</option>
+              <option value="light">Light</option>
+              <option value="jumper">Jumper</option>
             </select>
           </div>
 

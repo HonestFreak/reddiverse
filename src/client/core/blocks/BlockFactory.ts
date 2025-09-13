@@ -66,6 +66,13 @@ export class BlockFactory {
     const mesh = new THREE.Mesh(geometry, materials);
     mesh.position.copy(position);
     mesh.userData = { blockType: blockTypeId, isPlaced: true };
+    if (blockTypeId === 'water') {
+      mesh.matrixAutoUpdate = true;
+      // Render order tweak to reduce sorting artifacts with transparent objects
+      mesh.renderOrder = 10;
+      // Ensure no raycast/collision side-effects by disabling frustum culling (optional)
+      // mesh.frustumCulled = false;
+    }
 
     const result: { mesh: THREE.Mesh; collisionOutlines?: THREE.LineSegments[] } = { mesh };
 
