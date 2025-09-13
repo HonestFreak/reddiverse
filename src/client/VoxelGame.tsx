@@ -253,7 +253,6 @@ function VoxelGame() {
     const velocity = new THREE.Vector3();
     const direction = new THREE.Vector3();
     const clock = new THREE.Clock();
-    const playerBase = new THREE.Vector3(0, 0, 0);
     let yaw = 0;
     let pitch = 0; // not heavily used; reserved for slight tilt
     
@@ -980,22 +979,13 @@ function VoxelGame() {
     function makeNameSprite(name: string): THREE.Sprite {
       const canvas = document.createElement('canvas');
       canvas.width = 256;
-      canvas.height = 128;
+      canvas.height = 64;
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('no 2d ctx');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.lineWidth = 4;
-      const pad = 8;
-      const w = canvas.width - pad * 2;
-      const h = canvas.height - pad * 2;
-      ctx.beginPath();
-      ctx.roundRect(pad, pad, w, h, 12);
-      ctx.fill();
-      ctx.stroke();
+      // Remove background box - just draw the text
       ctx.fillStyle = 'white';
-      ctx.font = 'bold 40px sans-serif';
+      ctx.font = 'bold 24px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(name, canvas.width / 2, canvas.height / 2);
@@ -1003,7 +993,7 @@ function VoxelGame() {
       tex.needsUpdate = true;
       const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
       const sprite = new THREE.Sprite(mat);
-      sprite.scale.set(1.6, 0.8, 1);
+      sprite.scale.set(1.0, 0.5, 1);
       sprite.position.set(0, 1.1, 0);
       return sprite;
     }
@@ -1036,7 +1026,7 @@ function VoxelGame() {
     }
 
     function getPlayerPosition(): PlayerPosition {
-      return { x: playerBase.x, y: playerBase.y, z: playerBase.z, yaw };
+      return { x: controller.playerBase.x, y: controller.playerBase.y, z: controller.playerBase.z, yaw };
     }
 
     async function initRealtime(): Promise<void> {
@@ -1067,7 +1057,7 @@ function VoxelGame() {
           const label = makeNameSprite(selfUsername);
           selfGroup.add(body);
           selfGroup.add(label);
-          selfGroup.position.copy(playerBase);
+          selfGroup.position.copy(controller.playerBase);
           scene.add(selfGroup);
         }
 
