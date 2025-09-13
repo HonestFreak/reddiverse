@@ -1,6 +1,7 @@
 import { context, reddit } from '@devvit/web/server';
+import type { WorldConfig } from '../../shared/types/WorldConfig';
 
-export const createPost = async () => {
+export const createPost = async (worldConfig?: WorldConfig) => {
   const { subredditName } = context;
   if (!subredditName) {
     throw new Error('subredditName is required');
@@ -12,7 +13,7 @@ export const createPost = async () => {
     },
     subredditName: subredditName,
     title: 'myvoxel234',
-    // No need to store blocks in post data anymore - using Redis instead
-    postData: {},
+    // Store initial world config in post data for traceability (primary store is Redis)
+    postData: worldConfig ? { worldConfig } : {},
   });
 };

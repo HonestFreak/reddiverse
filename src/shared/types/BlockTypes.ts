@@ -68,6 +68,26 @@ export const defaultBlockTypes: BlockTypeRegistry = {
       bottom: { type: 'color', value: '#4a90e2' }
     },
     fallbackColor: '#4a90e2'
+  },
+  snow: {
+    id: 'snow',
+    name: 'Snow',
+    textures: {
+      top: { type: 'color', value: '#ffffff' },
+      side: { type: 'color', value: '#e6f0ff' },
+      bottom: { type: 'color', value: '#ffffff' }
+    },
+    fallbackColor: '#ffffff'
+  },
+  leaf: {
+    id: 'leaf',
+    name: 'Leaf',
+    textures: {
+      top: { type: 'image', value: '/leaf.png' },
+      side: { type: 'image', value: '/leaf.png' },
+      bottom: { type: 'image', value: '/leaf.png' }
+    },
+    fallbackColor: '#3ba84a'
   }
 };
 

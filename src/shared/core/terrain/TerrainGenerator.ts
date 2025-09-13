@@ -10,6 +10,10 @@ export class TerrainGenerator {
     this.perlin = new Perlin2D(config.seed);
   }
 
+  getSeed(): number {
+    return this.config.seed;
+  }
+
   private fbm(nx: number, nz: number): number {
     const { octaves, persistence, lacunarity, useRidged } = this.config;
     let amplitude = 1.0;

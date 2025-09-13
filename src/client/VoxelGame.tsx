@@ -10,6 +10,7 @@ import { InputManager } from './core/input/InputManager';
 import { ThirdPersonController } from './core/player/ThirdPersonController';
 import { BlockFactory } from './core/blocks/BlockFactory';
 import { defaultBlockTypes } from '../shared/types/BlockTypes';
+import { getTerrainParamsForPreset, presetSurfaceBlockId } from '../shared/types/WorldConfig';
 
 function VoxelGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -157,6 +158,7 @@ function VoxelGame() {
   }, [selectedBlockType]);
 
   useEffect(() => {
+    const run = async () => {
     if (!canvasRef.current) return;
 
     // Detect mobile device
@@ -292,24 +294,43 @@ function VoxelGame() {
     const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a7c59, 0.6);
     scene.add(hemiLight);
 
-    // Ground
-    const groundGeo = new THREE.PlaneGeometry(50, 50);
-    const groundMat = new THREE.MeshLambertMaterial({ color: 0x4a7c59 });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.5;
-    ground.userData = { isGround: true };
-    scene.add(ground);
-    addDebugLog(`Ground added at ${ground.position.x}, ${ground.position.y}, ${ground.position.z}`);
+    
 
-    // Procedural terrain (Perlin fBm) via ChunkManager
-    const terrain = new TerrainGenerator(defaultGameConfig.terrain);
+    // Fetch world config (terrain preset + seed) from server
+    let worldConfig: { terrainType: 'greenery' | 'desert' | 'mountains'; seed: number } | null = null;
+    try {
+      const wcRes = await fetch('/api/world-config');
+      if (wcRes.ok) {
+        worldConfig = await wcRes.json();
+      }
+    } catch (_) {}
+
+    const terrainParams = getTerrainParamsForPreset(
+      (worldConfig?.terrainType ?? 'greenery'),
+      (worldConfig?.seed ?? defaultGameConfig.terrain.seed)
+    );
+    // Procedural terrain (Perlin fBm) via ChunkManager using preset params
+    const terrain = new TerrainGenerator(terrainParams);
+    const surfaceBlockId = presetSurfaceBlockId(worldConfig?.terrainType ?? 'greenery');
+    // Snow only at the very top of mountains: dynamic threshold near max height
+    const snowOverlayCfg = (worldConfig?.terrainType === 'mountains')
+      ? {
+          threshold: Math.max(
+            Math.floor(terrainParams.heightScale - 3),
+            Math.floor(terrainParams.heightScale * 0.8)
+          ),
+          depth: 2,
+          blockId: 'snow',
+        }
+      : undefined;
     const chunkManager = new ChunkManager(
       scene,
       terrain,
       defaultGameConfig.chunk,
       defaultGameConfig.render,
-      defaultBlockTypes
+      defaultBlockTypes,
+      surfaceBlockId,
+      snowOverlayCfg
     );
     
     // Create block factory for placing individual blocks
@@ -483,8 +504,8 @@ function VoxelGame() {
       // Get all terrain meshes for raycasting
       const allTerrainMeshes = chunkManager.getAllTerrainMeshes();
       
-      // Check intersection with existing placed blocks, ground, and terrain
-      const intersects = raycaster.intersectObjects([ground as unknown as THREE.Object3D, ...placedMeshes, ...allTerrainMeshes], false);
+      // Check intersection with existing placed blocks and terrain
+      const intersects = raycaster.intersectObjects([...placedMeshes, ...allTerrainMeshes], false);
       addDebugLog(`Found ${intersects.length} intersections`);
       
       if (intersects.length > 0) {
@@ -492,7 +513,6 @@ function VoxelGame() {
         if (intersected) {
           const block = intersected.object as THREE.Mesh | THREE.InstancedMesh;
           const isTerrain = allTerrainMeshes.includes(block as THREE.InstancedMesh);
-          const isGround = block === ground;
           
           if (event instanceof MouseEvent) {
             if (event.button === 0) { // Left click - place block adjacent to face
@@ -504,7 +524,7 @@ function VoxelGame() {
                 let base: THREE.Vector3;
                 let offsetScalar = 1.0;
 
-                if (isGround || isTerrain) {
+                if (isTerrain) {
                   // Use the intersection point for ground/terrain and half-block offset
                   base = intersected.point.clone();
                   offsetScalar = 0.5;
@@ -519,7 +539,7 @@ function VoxelGame() {
                 placeBlock(Math.round(newPos.x), Math.round(newPos.y), Math.round(newPos.z), selectedBlockTypeRef.current);
               }
             } else if (event.button === 2) { // Right click - remove block
-              if (!isGround && !isTerrain) {
+              if (!isTerrain) {
                 addDebugLog(`Removing block at ${block.position.x}, ${block.position.y}, ${block.position.z}`);
                 removeBlock(block.position.x, block.position.y, block.position.z);
               }
@@ -534,7 +554,7 @@ function VoxelGame() {
               let base: THREE.Vector3;
               let offsetScalar = 1.0;
 
-              if (isGround || isTerrain) {
+              if (isTerrain) {
                 // Use the intersection point for ground/terrain and half-block offset
                 base = intersected.point.clone();
                 offsetScalar = 0.5;
@@ -809,7 +829,8 @@ function VoxelGame() {
         { gravity, walkSpeed, sprintMultiplier, damping, cameraDistance, cameraHeight, playerHeight: defaultGameConfig.controls.playerHeight, canJumpRef },
         velocity,
         heightAt,
-        placedMeshes
+        placedMeshes,
+        streamer ? chunkManager.getFoliageCollisionCells() : undefined
       );
       // Sync back yaw/pitch for UI/inputs that still use local yaw/pitch
       yaw = controller.yaw;
@@ -1114,6 +1135,8 @@ function VoxelGame() {
       if (realtimeConnection) realtimeConnection.disconnect().catch(() => {});
       input.detach();
     };
+    };
+    void run();
   }, []);
 
   return (

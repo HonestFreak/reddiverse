@@ -22,11 +22,22 @@
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/post-create"
+      },
+      {
+        "label": "Create Voxel World",
+        "description": "Initialize world config (terrain + seed)",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/menu/start-world-create"
       }
     ]
   },
   "triggers": {
     "onAppInstall": "/internal/on-app-install"
+  },
+  "forms": {
+    "worldConfigForm": "/internal/form/world-config-submit",
+    "worldConfigCreateForm": "/internal/form/world-config-create"
   },
   "permissions": {
     "redis": true

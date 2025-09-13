@@ -59,3 +59,39 @@ export async function buildSurfaceInstancedMesh(
 
   return result;
 }
+
+export async function buildSnowOverlayInstancedMesh(
+  chunk: ChunkData,
+  render: RenderConfig,
+  blockFactory: BlockFactory,
+  snowBlockTypeId: string,
+  thresholdHeight: number,
+  snowDepth: number
+): Promise<BuildResult | null> {
+  const { sizeX, sizeZ, blockSize, heights } = chunk;
+
+  const instances: Array<{ position: THREE.Vector3; matrix: THREE.Matrix4 }> = [];
+  for (let z = 0; z < sizeZ; z++) {
+    for (let x = 0; x < sizeX; x++) {
+      const h = heights[indexOf(x, z, sizeX)] ?? 0;
+      if (h > thresholdHeight) {
+        // Top snow layer position(s). We keep it simple: place a snow block at the top and (snowDepth-1) blocks below if desired
+        for (let d = 0; d < snowDepth; d++) {
+          const y = h - d;
+          if (y <= 0) break;
+          const position = new THREE.Vector3(
+            (x - Math.floor(sizeX / 2)) * blockSize,
+            y * blockSize,
+            (z - Math.floor(sizeZ / 2)) * blockSize
+          );
+          const matrix = new THREE.Matrix4();
+          matrix.setPosition(position);
+          instances.push({ position, matrix });
+        }
+      }
+    }
+  }
+
+  if (instances.length === 0) return null;
+  return await blockFactory.createInstancedBlock(snowBlockTypeId, instances, { showCollisionOutlines: render.showCollisionOutlines });
+}

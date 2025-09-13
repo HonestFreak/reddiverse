@@ -14,7 +14,14 @@ export class ThirdPersonController {
     this.input = input;
   }
 
-  updatePhysics(delta: number, opts: { gravity: number; walkSpeed: number; sprintMultiplier: number; damping: number; cameraDistance: number; cameraHeight: number; playerHeight: number; canJumpRef?: { current: boolean } }, velocity: THREE.Vector3, heightAt: (x: number, z: number) => number, placedBlocks?: THREE.Mesh[]): void {
+  updatePhysics(
+    delta: number,
+    opts: { gravity: number; walkSpeed: number; sprintMultiplier: number; damping: number; cameraDistance: number; cameraHeight: number; playerHeight: number; canJumpRef?: { current: boolean } },
+    velocity: THREE.Vector3,
+    heightAt: (x: number, z: number) => number,
+    placedBlocks?: THREE.Mesh[],
+    foliageCells?: Set<string>
+  ): void {
     const { gravity, walkSpeed, sprintMultiplier, damping, cameraDistance, cameraHeight, playerHeight, canJumpRef } = opts;
 
     // Apply friction to horizontal velocity
@@ -41,7 +48,7 @@ export class ThirdPersonController {
     if (direction.x !== 0) moveVector.addScaledVector(rightDir, direction.x * speed);
     
     // Check for horizontal collision with placed blocks before moving
-    if (placedBlocks && moveVector.length() > 0) {
+    if ((placedBlocks || foliageCells) && moveVector.length() > 0) {
       const newX = this.playerBase.x + moveVector.x;
       const newZ = this.playerBase.z + moveVector.z;
       const playerRadius = 0.3; // Approximate player radius
@@ -49,41 +56,40 @@ export class ThirdPersonController {
       let canMoveX = true;
       let canMoveZ = true;
       
-      for (const block of placedBlocks) {
-        const blockPos = block.position;
-        const blockX = Math.round(blockPos.x);
-        const blockZ = Math.round(blockPos.z);
-        const blockY = blockPos.y;
-        
-        // Check if there's a block at the new position
-        const newBlockX = Math.round(newX);
-        const newBlockZ = Math.round(newZ);
-        
-        // Check X movement collision
-        if (newBlockX === blockX && Math.round(this.playerBase.z) === blockZ) {
-          // Check if player would collide with this block vertically
-          const playerBottom = this.playerBase.y;
-          const playerTop = this.playerBase.y + playerHeight;
-          const blockBottom = blockY - 0.5; // Block bottom surface
-          const blockTop = blockY + 0.5;   // Block top surface
-          
-          if (playerTop > blockBottom && playerBottom < blockTop) {
-            canMoveX = false;
+      const newBlockX = Math.round(newX);
+      const newBlockZ = Math.round(newZ);
+
+      // Check collisions vs placed blocks
+      if (placedBlocks) {
+        for (const block of placedBlocks) {
+          const blockPos = block.position;
+          const blockX = Math.round(blockPos.x);
+          const blockZ = Math.round(blockPos.z);
+          const blockY = blockPos.y;
+
+          if (newBlockX === blockX && Math.round(this.playerBase.z) === blockZ) {
+            const playerBottom = this.playerBase.y;
+            const playerTop = this.playerBase.y + playerHeight;
+            const blockBottom = blockY - 0.5;
+            const blockTop = blockY + 0.5;
+            if (playerTop > blockBottom && playerBottom < blockTop) canMoveX = false;
+          }
+          if (Math.round(this.playerBase.x) === blockX && newBlockZ === blockZ) {
+            const playerBottom = this.playerBase.y;
+            const playerTop = this.playerBase.y + playerHeight;
+            const blockBottom = blockY - 0.5;
+            const blockTop = blockY + 0.5;
+            if (playerTop > blockBottom && playerBottom < blockTop) canMoveZ = false;
           }
         }
-        
-        // Check Z movement collision
-        if (Math.round(this.playerBase.x) === blockX && newBlockZ === blockZ) {
-          // Check if player would collide with this block vertically
-          const playerBottom = this.playerBase.y;
-          const playerTop = this.playerBase.y + playerHeight;
-          const blockBottom = blockY - 0.5; // Block bottom surface
-          const blockTop = blockY + 0.5;   // Block top surface
-          
-          if (playerTop > blockBottom && playerBottom < blockTop) {
-            canMoveZ = false;
-          }
-        }
+      }
+
+      // Check collisions vs foliage cells (treated as solid cubes)
+      if (foliageCells) {
+        const keyX = `${newBlockX},${Math.round(this.playerBase.y)},${Math.round(this.playerBase.z)}`;
+        const keyZ = `${Math.round(this.playerBase.x)},${Math.round(this.playerBase.y)},${newBlockZ}`;
+        if (foliageCells.has(keyX)) canMoveX = false;
+        if (foliageCells.has(keyZ)) canMoveZ = false;
       }
       
       // Apply movement only if no collision
