@@ -24,8 +24,7 @@ import WorldInfo from './ui/overlays/WorldInfo';
 import DebugLog from './ui/overlays/DebugLog';
 import PlayerStatusDesktop from './ui/panels/PlayerStatusDesktop';
 import PlayerStatusMobile from './ui/panels/PlayerStatusMobile';
-import CreatorPanelDesktop from './ui/creator/CreatorPanelDesktop';
-import CreatorPanelMobile from './ui/creator/CreatorPanelMobile';
+// Creator panels deprecated; kept imports removed to avoid bundle size
 import MobileControls from './ui/controls/MobileControls';
 import BuilderManagementModal from './ui/modals/BuilderManagementModal';
 import SmartBlockCreateModal from './ui/modals/SmartBlockCreateModal';

@@ -22,81 +22,25 @@ export default function MobileControls({ isMobile, joystickRef, joystickPosition
         onTouchStart={onJoystickStart}
         onTouchMove={onJoystickMove}
         onTouchEnd={onJoystickEnd}
-        style={{
-          position: 'absolute',
-          bottom: '30px',
-          left: '30px',
-          width: '120px',
-          height: '120px',
-          background: 'rgba(255,255,255,0.2)',
-          border: '3px solid rgba(255,255,255,0.5)',
-          borderRadius: '50%',
-          zIndex: 1000,
-          touchAction: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}
+        className="absolute bottom-7 left-7 z-[1000] flex items-center justify-center size-[120px] rounded-full border-4 border-white/50 bg-white/20 touch-none"
       >
         <div
-          style={{
-            width: '40px',
-            height: '40px',
-            background: 'rgba(255,255,255,0.8)',
-            border: '2px solid white',
-            borderRadius: '50%',
-            transform: `translate(${joystickPosition.x}px, ${joystickPosition.y}px)`,
-            transition: isJoystickActive ? 'none' : 'transform 0.2s ease',
-            pointerEvents: 'none'
-          }}
+          className="size-10 rounded-full border-2 border-white bg-white/80 pointer-events-none will-change-transform"
+          style={{ transform: `translate(${joystickPosition.x}px, ${joystickPosition.y}px)`, transition: isJoystickActive ? 'none' : 'transform 0.2s ease' }}
         />
       </div>
 
-      <div style={{
-        position: 'absolute',
-        bottom: '30px',
-        right: '30px',
-        zIndex: 1000,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '15px'
-      }}>
+      <div className="absolute bottom-7 right-7 z-[1000] flex flex-col gap-4">
         <button
           onTouchStart={onJump}
-          style={{
-            background: 'rgba(255,255,255,0.3)',
-            border: '3px solid rgba(255,255,255,0.6)',
-            borderRadius: '50%',
-            color: 'white',
-            width: '60px',
-            height: '60px',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            touchAction: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
+          className="size-[60px] rounded-full border-4 border-white/60 bg-white/30 text-white font-bold text-xs flex items-center justify-center touch-none active:scale-95 transition-transform"
         >
           JUMP
         </button>
         <button
           onTouchStart={onSprintStart}
           onTouchEnd={onSprintEnd}
-          style={{
-            background: 'rgba(255,255,255,0.3)',
-            border: '3px solid rgba(255,255,255,0.6)',
-            borderRadius: '50%',
-            color: 'white',
-            width: '60px',
-            height: '60px',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            touchAction: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
+          className="size-[60px] rounded-full border-4 border-white/60 bg-white/30 text-white font-bold text-[11px] flex items-center justify-center touch-none active:scale-95 transition-transform"
         >
           SPRINT
         </button>

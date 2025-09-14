@@ -1,15 +1,16 @@
-import React from 'react';
+import { useEffect } from 'react';
 import { useVoxelGame } from './game/useVoxelGame';
 import StartOverlay from './ui/overlays/StartOverlay';
 import ErrorOverlay from './ui/overlays/ErrorOverlay';
-import WorldInfo from './ui/overlays/WorldInfo';
-import DebugLog from './ui/overlays/DebugLog';
+// import WorldInfo from './ui/overlays/WorldInfo';
+// import DebugLog from './ui/overlays/DebugLog';
+import InfoDock from './ui/overlays/InfoDock';
 import PlayerStatusDesktop from './ui/panels/PlayerStatusDesktop';
 import PlayerStatusMobile from './ui/panels/PlayerStatusMobile';
-import CreatorPanelDesktop from './ui/creator/CreatorPanelDesktop';
-import CreatorPanelMobile from './ui/creator/CreatorPanelMobile';
+import BlockHotbar from './ui/blocks/BlockHotbar';
+import BlockPaletteModal from './ui/blocks/BlockPaletteModal';
 import MobileControls from './ui/controls/MobileControls';
-import BuilderManagementModal from './ui/modals/BuilderManagementModal';
+// import BuilderManagementModal from './ui/modals/BuilderManagementModal';
 import SmartBlockCreateModal from './ui/modals/SmartBlockCreateModal';
 
 export default function GameScreen() {
@@ -24,14 +25,14 @@ export default function GameScreen() {
     joystickRef,
     isPostCreator,
     canBuild,
-    isOwner,
+    // isOwner,
     worldConfig,
     showBuilderManagement,
     setShowBuilderManagement,
-    builderInput,
-    setBuilderInput,
-    addBuilder,
-    removeBuilder,
+    // builderInput,
+    // setBuilderInput,
+    // addBuilder,
+    // removeBuilder,
     selectedBlockType,
     setSelectedBlockType,
     allBlockTypes,
@@ -48,18 +49,26 @@ export default function GameScreen() {
     handleJoystickMove,
     handleJoystickEnd,
     handleMobileJump,
-    addBlockAtPlayerRef,
-    removeBlockAtPlayerRef,
+    // addBlockAtPlayerRef,
+    // removeBlockAtPlayerRef,
   } = useVoxelGame();
+
+  // Hotbar favorites: pick a small default set; can be enhanced later to persist
+  const favoriteIds = ['grass', 'stone', 'wood', 'sand', 'water', 'light'].filter((id) => (allBlockTypes as any)[id]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       <ErrorOverlay message={sceneError} deviceLabel={isMobile ? 'mobile' : 'PC'} />
       <StartOverlay visible={!isPointerLocked && !isMobile && !sceneError} />
       {!sceneError && (
-        <WorldInfo worldConfig={worldConfig} isMobile={isMobile} canBuild={canBuild} />
+        <>
+          {/* Hide legacy overlays on desktop in favor of InfoDock */}
+          {!isMobile && (
+            <InfoDock isMobile={isMobile} worldConfig={worldConfig} canBuild={canBuild} logs={debugLogs} />
+          )}
+          {/* Keep legacy overlays for mobile only (per request: don't show info for mobile, so we skip both) */}
+        </>
       )}
-      {!sceneError && <DebugLog logs={debugLogs} />}
 
       {!sceneError && isMobile && (
         <PlayerStatusMobile
@@ -71,31 +80,31 @@ export default function GameScreen() {
       )}
       {!sceneError && !isMobile && <PlayerStatusDesktop playerState={playerState} />}
 
-      {!sceneError && !isMobile && canBuild && (
-        <CreatorPanelDesktop
-          visible={true}
-          isOwner={isOwner}
-          worldConfig={worldConfig}
-          allBlockTypes={allBlockTypes as any}
-          selectedBlockType={selectedBlockType}
-          onChangeBlockType={setSelectedBlockType}
-          onAdd={() => addBlockAtPlayerRef.current()}
-          onRemove={() => removeBlockAtPlayerRef.current()}
-          onOpenSmart={() => setShowSmartCreate(true)}
-          onOpenBuilderManagement={() => setShowBuilderManagement(true)}
-        />
-      )}
-
-      {!sceneError && isMobile && canBuild && (
-        <CreatorPanelMobile
-          visible={true}
-          allBlockTypes={allBlockTypes as any}
-          selectedBlockType={selectedBlockType}
-          onChangeBlockType={setSelectedBlockType}
-          onAdd={() => addBlockAtPlayerRef.current()}
-          onRemove={() => removeBlockAtPlayerRef.current()}
-          onOpenSmart={() => setShowSmartCreate(true)}
-        />
+      {!sceneError && canBuild && (
+        <>
+          <BlockHotbar
+            isMobile={isMobile}
+            allBlockTypes={allBlockTypes as any}
+            favorites={favoriteIds}
+            selectedBlockType={selectedBlockType}
+            onSelect={setSelectedBlockType}
+            onExpand={() => setShowBuilderManagement(true)}
+          />
+          {/* Keyboard shortcuts 1-6 for quick selection (desktop) */}
+          {(!isMobile) && (
+            <KeyboardHotbarBinder
+              favorites={favoriteIds}
+              onSelect={setSelectedBlockType}
+            />
+          )}
+          <BlockPaletteModal
+            visible={showBuilderManagement}
+            allBlockTypes={allBlockTypes as any}
+            onClose={() => setShowBuilderManagement(false)}
+            onSelect={(id) => setSelectedBlockType(id)}
+            onCreateSmart={() => { setShowBuilderManagement(false); setShowSmartCreate(true); }}
+          />
+        </>
       )}
 
       {!sceneError && (
@@ -108,30 +117,12 @@ export default function GameScreen() {
           onJoystickMove={handleJoystickMove}
           onJoystickEnd={handleJoystickEnd}
           onJump={handleMobileJump}
-          onSprintStart={(e) => {
-            e.preventDefault();
-            const newState = { ...mobileMoveState, sprint: true };
-            // setMobileMoveState provided inside hook; using set is encapsulated there
-            // local fast update via refs is handled inside hook's handlers
-          }}
-          onSprintEnd={(e) => {
-            e.preventDefault();
-            const newState = { ...mobileMoveState, sprint: false };
-          }}
+          onSprintStart={(e) => { e.preventDefault(); }}
+          onSprintEnd={(e) => { e.preventDefault(); }}
         />
       )}
 
-      {showBuilderManagement && worldConfig && (
-        <BuilderManagementModal
-          visible={true}
-          worldConfig={worldConfig}
-          builderInput={builderInput}
-          onChangeBuilderInput={setBuilderInput}
-          onAddBuilder={addBuilder}
-          onRemoveBuilder={removeBuilder}
-          onClose={() => setShowBuilderManagement(false)}
-        />
-      )}
+      {/* Builder management deprecated in UI for this pass; could be reintroduced elsewhere */}
 
       {showSmartCreate && !sceneError && (
         <SmartBlockCreateModal
@@ -151,9 +142,9 @@ export default function GameScreen() {
               const res = await fetch('/api/smart-blocks/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: smartForm.name, textures: { ...(smartForm.side ? { side: smartForm.side } : {}), ...(smartForm.top ? { top: smartForm.top } : {}), ...(smartForm.bottom ? { bottom: smartForm.bottom } : {}) }, onClick, onTouch }) });
               if (!res.ok) { const errorData = await res.json().catch(() => ({})); setSmartCreateStatus({ type: 'error', message: `Server error: ${errorData.message || res.statusText}` }); return; }
               await res.json();
-              setSmartCreateStatus({ type: 'success', message: `Smart block "${smartForm.name}" created successfully!` });
-              // Reload handled by hook-side logic when needed (kept simple here)
-              setTimeout(() => { setShowSmartCreate(false); setSmartCreateStatus({ type: null, message: '' }); }, 2000);
+              setSmartCreateStatus({ type: 'success', message: `Smart block "${smartForm.name}" created successfully! ✨` });
+              // Small celebration animation is handled in the modal via animate-pulse class
+              setTimeout(() => { setShowSmartCreate(false); setSmartCreateStatus({ type: null, message: '' }); }, 1200);
             } catch (e) {
               setSmartCreateStatus({ type: 'error', message: `Network error: ${e instanceof Error ? e.message : 'Unknown error'}` });
             }
@@ -164,6 +155,26 @@ export default function GameScreen() {
       {!sceneError && <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }} />}
     </div>
   );
+}
+
+function KeyboardHotbarBinder({ favorites, onSelect }: { favorites: string[]; onSelect: (id: string) => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const map: Record<string, number> = {
+        Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4, Digit6: 5,
+        Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, Numpad5: 4, Numpad6: 5,
+        KeyZ: 0, KeyX: 1, KeyC: 2, KeyV: 3, KeyB: 4, KeyN: 5,
+      };
+      const idx = map[e.code];
+      if (idx == null) return;
+      if (idx < favorites.length) {
+        onSelect(favorites[idx]!);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [favorites, onSelect]);
+  return null;
 }
 
 
