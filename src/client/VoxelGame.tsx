@@ -18,6 +18,17 @@ import { JumperBlock } from './core/blocks/special/JumperBlock';
 import { WaterBlock } from './core/blocks/special/WaterBlock';
 import { SkyManager } from './core/sky/SkyManager';
 import { TimeManager } from './core/sky/TimeManager';
+import StartOverlay from './ui/overlays/StartOverlay';
+import ErrorOverlay from './ui/overlays/ErrorOverlay';
+import WorldInfo from './ui/overlays/WorldInfo';
+import DebugLog from './ui/overlays/DebugLog';
+import PlayerStatusDesktop from './ui/panels/PlayerStatusDesktop';
+import PlayerStatusMobile from './ui/panels/PlayerStatusMobile';
+import CreatorPanelDesktop from './ui/creator/CreatorPanelDesktop';
+import CreatorPanelMobile from './ui/creator/CreatorPanelMobile';
+import MobileControls from './ui/controls/MobileControls';
+import BuilderManagementModal from './ui/modals/BuilderManagementModal';
+import SmartBlockCreateModal from './ui/modals/SmartBlockCreateModal';
 
 function VoxelGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1392,567 +1403,112 @@ function VoxelGame() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
-      {/* Error fallback */}
-      {sceneError && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          color: 'white',
-          textAlign: 'center',
-          zIndex: 1000,
-          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-          background: 'rgba(0,0,0,0.8)',
-          padding: '20px',
-          borderRadius: '10px',
-          maxWidth: '300px'
-        }}>
-          <h2>⚠️ Graphics Error</h2>
-          <p>{sceneError}</p>
-          <p style={{ fontSize: '14px', marginTop: '10px' }}>
-            Device: {isMobile ? 'mobile' : 'PC'}
-          </p>
-        </div>
-      )}
+      <ErrorOverlay message={sceneError} deviceLabel={isMobile ? 'mobile' : 'PC'} />
 
-      {!isPointerLocked && !isMobile && !sceneError && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          color: 'white',
-          textAlign: 'center',
-          zIndex: 1000,
-          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-          background: 'rgba(0,0,0,0.5)',
-          padding: '20px',
-          borderRadius: '10px'
-        }}>
-          <h1>Voxel Game</h1>
-          <p>Click to start playing</p>
-          <p>W/S to move • A/D to rotate • Space to jump • Shift to sprint</p>
-        </div>
-      )}
+      <StartOverlay visible={!isPointerLocked && !isMobile && !sceneError} />
 
-      {/* World info and device type indicator */}
       {!sceneError && (
-        <div style={{
-          position: 'absolute',
-          top: '20px',
-          left: '20px',
-          color: 'white',
-          textAlign: 'left',
-          zIndex: 1000,
-          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-          background: 'rgba(0,0,0,0.7)',
-          padding: '12px 16px',
-          borderRadius: '10px',
-          fontSize: '14px',
-          fontWeight: 'bold',
-          maxWidth: '300px'
-        }}>
-          {worldConfig && (
-            <div style={{ marginBottom: '8px' }}>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#4CAF50' }}>
-                {worldConfig.worldName}
-              </div>
-              <div style={{ fontSize: '12px', opacity: 0.8 }}>
-                {worldConfig.buildingPermission === 'public' ? '🌍 Public' : '🔒 Restricted'}
-                {worldConfig.buildingPermission === 'restricted' && worldConfig.builders.length > 0 && (
-                  <span> • {worldConfig.builders.length} builder{worldConfig.builders.length !== 1 ? 's' : ''}</span>
-                )}
-              </div>
-            </div>
-          )}
-          <div style={{ fontSize: '12px', opacity: 0.7 }}>
-            {isMobile ? '📱 Mobile' : '💻 PC'} • {canBuild ? '✏️ Can Build' : '👀 View Only'}
-          </div>
-        </div>
+        <WorldInfo worldConfig={worldConfig} isMobile={isMobile} canBuild={canBuild} />
       )}
 
-      {/* Debug logs */}
-      {!sceneError && debugLogs.length > 0 && (
-        <div style={{
-          position: 'absolute',
-          bottom: '20px',
-          left: '20px',
-          color: 'white',
-          zIndex: 1000,
-          textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
-          background: 'rgba(0,0,0,0.8)',
-          padding: '10px',
-          borderRadius: '8px',
-          fontSize: '12px',
-          fontFamily: 'monospace',
-          maxWidth: '400px',
-          maxHeight: '200px',
-          overflow: 'auto'
-        }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Debug Logs:</div>
-          {debugLogs.map((log, index) => (
-            <div key={index} style={{ marginBottom: '2px', opacity: 0.9 }}>
-              {log}
-            </div>
-          ))}
-        </div>
+      {!sceneError && <DebugLog logs={debugLogs} />}
+
+      {!sceneError && isMobile && (
+        <PlayerStatusMobile
+          playerState={playerState}
+          isPostCreator={isPostCreator}
+          mobileMoveState={mobileMoveState}
+          mobileRotationState={mobileRotationState}
+        />
       )}
 
-      {isMobile && !sceneError && (
-        <div style={{
-          position: 'absolute',
-          top: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          color: 'white',
-          textAlign: 'center',
-          zIndex: 1000,
-          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-          background: 'rgba(0,0,0,0.5)',
-          padding: '10px 20px',
-          borderRadius: '10px'
-        }}>
-          <h2>Voxel Game</h2>
-          <p>Touch and drag to look • Use joystick to move and rotate</p>
-          {isPostCreator && <p style={{ color: '#4CAF50', fontWeight: 'bold' }}>✏️ Creator Mode - Tap blocks to edit</p>}
-          
-          {/* Player State Display */}
-          <div style={{ fontSize: '14px', marginTop: '8px', padding: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '5px' }}>
-            <div style={{ color: playerState.life > 50 ? '#4CAF50' : playerState.life > 20 ? '#FF9800' : '#f44336' }}>
-              ❤️ Life: {playerState.life}/100
-            </div>
-            {playerState.isWinner && <div style={{ color: '#FFD700', fontWeight: 'bold' }}>🏆 Winner!</div>}
-            {playerState.badge && <div style={{ color: '#2196F3' }}>🏅 {playerState.badge}</div>}
-          </div>
-          
-          {/* Debug mobile movement state */}
-          <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.7 }}>
-            Movement: {mobileMoveState.forward ? 'W' : ''}{mobileMoveState.backward ? 'S' : ''}
-            {mobileRotationState.left ? 'A(rot)' : ''}{mobileRotationState.right ? 'D(rot)' : ''}
-            {!mobileMoveState.forward && !mobileMoveState.backward && !mobileRotationState.left && !mobileRotationState.right && 'None'}
-            {mobileMoveState.sprint && ' (Sprint)'}
-          </div>
-        </div>
+      {!sceneError && !isMobile && (
+        <PlayerStatusDesktop playerState={playerState} />
       )}
 
-      {/* Player State Display - Desktop */}
-      {!isMobile && !sceneError && (
-        <div style={{
-          position: 'absolute',
-          top: '20px',
-          left: '20px',
-          color: 'white',
-          zIndex: 1000,
-          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-          background: 'rgba(0,0,0,0.7)',
-          padding: '12px',
-          borderRadius: '8px',
-          minWidth: '180px'
-        }}>
-          <h4 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>Player Status</h4>
-          <div style={{ fontSize: '14px', marginBottom: '4px' }}>
-            <span style={{ color: playerState.life > 50 ? '#4CAF50' : playerState.life > 20 ? '#FF9800' : '#f44336' }}>
-              ❤️ Life: {playerState.life}/100
-            </span>
-          </div>
-          {playerState.isWinner && (
-            <div style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '14px' }}>🏆 Winner!</div>
-          )}
-          {playerState.badge && (
-            <div style={{ color: '#2196F3', fontSize: '12px' }}>🏅 {playerState.badge}</div>
-          )}
-        </div>
+      {!sceneError && !isMobile && canBuild && (
+        <CreatorPanelDesktop
+          visible={true}
+          isOwner={isOwner}
+          worldConfig={worldConfig}
+          allBlockTypes={allBlockTypes as any}
+          selectedBlockType={selectedBlockType}
+          onChangeBlockType={setSelectedBlockType}
+          onAdd={() => addBlockAtPlayerRef.current()}
+          onRemove={() => removeBlockAtPlayerRef.current()}
+          onOpenSmart={() => setShowSmartCreate(true)}
+          onOpenBuilderManagement={() => setShowBuilderManagement(true)}
+        />
       )}
 
-      {/* Desktop creator controls */}
-      {!isMobile && canBuild && !sceneError && (
-        <div style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          color: 'white',
-          zIndex: 1000,
-          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-          background: 'rgba(0,0,0,0.7)',
-          padding: '15px',
-          borderRadius: '10px',
-          minWidth: '200px'
-        }}>
-          <h3 style={{ color: '#4CAF50', margin: '0 0 10px 0' }}>✏️ Creator Mode</h3>
-          <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>Left click: Remove block<br/>Right click: Place block</p>
-          
-          {isOwner && worldConfig && (
-            <div style={{ marginBottom: '10px' }}>
-              <button
-                onClick={() => setShowBuilderManagement(true)}
-                style={{
-                  padding: '6px 12px',
-                  background: '#FF9800',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  width: '100%'
-                }}
-              >
-                👥 Manage Builders ({worldConfig.builders.length})
-              </button>
-            </div>
-          )}
-          
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Block Type:</label>
-            <select 
-              value={selectedBlockType} 
-              onChange={(e) => setSelectedBlockType(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '5px',
-                borderRadius: '5px',
-                border: '1px solid #ccc',
-                background: 'white',
-                color: 'black'
-              }}
-            >
-              {Object.values(allBlockTypes).map((bt) => (
-                <option key={bt.id} value={bt.id}>{bt.name}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div style={{ 
-            padding: '8px', 
-            background: 'rgba(76, 175, 80, 0.2)', 
-            borderRadius: '5px',
-            fontSize: '12px',
-            border: '1px solid #4CAF50'
-          }}>
-            Selected: <span style={{ fontWeight: 'bold', textTransform: 'capitalize' }}>{selectedBlockType}</span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-            <button
-              onClick={() => addBlockAtPlayerRef.current()}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                background: '#4CAF50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: 'bold'
-              }}
-            >
-              + Add Block
-            </button>
-            <button
-              onClick={() => setShowSmartCreate(true)}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                background: '#2196F3',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: 'bold'
-              }}
-            >
-              + Smart Block
-            </button>
-            <button
-              onClick={() => removeBlockAtPlayerRef.current()}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                background: '#f44336',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: 'bold'
-              }}
-            >
-              - Remove
-            </button>
-          </div>
-
-        </div>
-      )}
-
-      {/* Mobile creator controls */}
-      {isMobile && canBuild && !sceneError && (
-        <div style={{
-          position: 'absolute',
-          top: '80px',
-          right: '20px',
-          color: 'white',
-          zIndex: 1000,
-          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-          background: 'rgba(0,0,0,0.7)',
-          padding: '10px',
-          borderRadius: '10px',
-          minWidth: '150px'
-        }}>
-          <h4 style={{ color: '#4CAF50', margin: '0 0 8px 0', fontSize: '14px' }}>✏️ Creator</h4>
-          <p style={{ margin: '0 0 8px 0', fontSize: '12px' }}>Tap blocks to edit</p>
-          
-          <div style={{ marginBottom: '8px' }}>
-            <label style={{ display: 'block', marginBottom: '3px', fontSize: '12px' }}>Block:</label>
-            <select 
-              value={selectedBlockType} 
-              onChange={(e) => setSelectedBlockType(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '3px',
-                borderRadius: '3px',
-                border: '1px solid #ccc',
-                background: 'white',
-                color: 'black',
-                fontSize: '12px'
-              }}
-            >
-              {Object.values(allBlockTypes).map((bt) => (
-                <option key={bt.id} value={bt.id}>{bt.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div style={{ display: 'flex', gap: '5px' }}>
-            <button
-              onTouchStart={() => addBlockAtPlayerRef.current()}
-              style={{
-                flex: 1,
-                padding: '6px 8px',
-                background: '#4CAF50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '3px',
-                fontSize: '10px',
-                fontWeight: 'bold',
-                touchAction: 'none'
-              }}
-            >
-              + Add
-            </button>
-            <button
-              onTouchStart={() => setShowSmartCreate(true)}
-              style={{
-                flex: 1,
-                padding: '6px 8px',
-                background: '#2196F3',
-                color: 'white',
-                border: 'none',
-                borderRadius: '3px',
-                fontSize: '10px',
-                fontWeight: 'bold',
-                touchAction: 'none'
-              }}
-            >
-              + Smart
-            </button>
-            <button
-              onTouchStart={() => removeBlockAtPlayerRef.current()}
-              style={{
-                flex: 1,
-                padding: '6px 8px',
-                background: '#f44336',
-                color: 'white',
-                border: 'none',
-                borderRadius: '3px',
-                fontSize: '10px',
-                fontWeight: 'bold',
-                touchAction: 'none'
-              }}
-            >
-              - Remove
-            </button>
-          </div>
-        </div>
+      {!sceneError && isMobile && canBuild && (
+        <CreatorPanelMobile
+          visible={true}
+          allBlockTypes={allBlockTypes as any}
+          selectedBlockType={selectedBlockType}
+          onChangeBlockType={setSelectedBlockType}
+          onAdd={() => addBlockAtPlayerRef.current()}
+          onRemove={() => removeBlockAtPlayerRef.current()}
+          onOpenSmart={() => setShowSmartCreate(true)}
+        />
       )}
       {showSmartCreate && !sceneError && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0,0,0,0.7)',
-          zIndex: 2000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px'
-        }}>
-          <div style={{
-            width: '100%',
-            maxWidth: '420px',
-            background: '#111',
-            color: 'white',
-            borderRadius: '10px',
-            padding: '16px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
-          }}>
-            <h3 style={{ marginTop: 0 }}>Create Smart Block</h3>
-            <div style={{ display: 'grid', gap: '8px' }}>
-              <label>
-                <div style={{ fontSize: '12px', opacity: 0.8 }}>Name</div>
-                <input value={smartForm.name} onChange={(e) => setSmartForm({ ...smartForm, name: e.target.value })} style={{ width: '100%', padding: 6 }} />
-              </label>
-              <label>
-                <div style={{ fontSize: '12px', opacity: 0.8 }}>Side Texture (color like #ff0 or image URL)</div>
-                <input placeholder="#ff9900 or https://..." onChange={(e) => {
-                  const v = e.target.value.trim();
-                  const side = v.startsWith('#') ? { type: 'color' as const, value: v } : v ? { type: 'image' as const, value: v } : null;
-                  setSmartForm({ ...smartForm, side });
-                }} style={{ width: '100%', padding: 6 }} />
-              </label>
-              <label>
-                <div style={{ fontSize: '12px', opacity: 0.8 }}>Top Texture (optional)</div>
-                <input placeholder="#ffeeaa or https://..." onChange={(e) => {
-                  const v = e.target.value.trim();
-                  const top = v.startsWith('#') ? { type: 'color' as const, value: v } : v ? { type: 'image' as const, value: v } : null;
-                  setSmartForm({ ...smartForm, top });
-                }} style={{ width: '100%', padding: 6 }} />
-              </label>
-              <label>
-                <div style={{ fontSize: '12px', opacity: 0.8 }}>Bottom Texture (optional)</div>
-                <input placeholder="#cc7700 or https://..." onChange={(e) => {
-                  const v = e.target.value.trim();
-                  const bottom = v.startsWith('#') ? { type: 'color' as const, value: v } : v ? { type: 'image' as const, value: v } : null;
-                  setSmartForm({ ...smartForm, bottom });
-                }} style={{ width: '100%', padding: 6 }} />
-              </label>
-              <label>
-                <div style={{ fontSize: '12px', opacity: 0.8 }}>onClick Actions JSON</div>
-                <textarea value={smartForm.onClick} onChange={(e) => setSmartForm({ ...smartForm, onClick: e.target.value })} rows={3} style={{ width: '100%', padding: 6 }} />
-              </label>
-              <label>
-                <div style={{ fontSize: '12px', opacity: 0.8 }}>onTouch Actions JSON</div>
-                <textarea value={smartForm.onTouch} onChange={(e) => setSmartForm({ ...smartForm, onTouch: e.target.value })} rows={3} style={{ width: '100%', padding: 6 }} />
-              </label>
-
-              {smartCreateStatus.type && (
-                <div style={{
-                  padding: '8px',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  color: 'white',
-                  background: smartCreateStatus.type === 'success' ? '#4CAF50' : '#f44336'
-                }}>
-                  {smartCreateStatus.message}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button onClick={() => {
-                  setShowSmartCreate(false);
-                  setSmartCreateStatus({ type: null, message: '' });
-                }} style={{ flex: 1, padding: '8px 12px' }}>Cancel</button>
-                <button onClick={async () => {
-                  setSmartCreateStatus({ type: null, message: '' });
-                  try {
-                    // Validate name
-                    if (!smartForm.name.trim()) {
-                      setSmartCreateStatus({ type: 'error', message: 'Name is required' });
-                      return;
-                    }
-
-                    // Validate at least one texture
-                    if (!smartForm.side && !smartForm.top && !smartForm.bottom) {
-                      setSmartCreateStatus({ type: 'error', message: 'At least one texture (side/top/bottom) is required' });
-                      return;
-                    }
-
-                    // Parse actions
-                    let onClick, onTouch;
-                    try {
-                      onClick = smartForm.onClick.trim() ? JSON.parse(smartForm.onClick) : undefined;
-                    } catch (e) {
-                      setSmartCreateStatus({ type: 'error', message: 'Invalid onClick JSON format' });
-                      return;
-                    }
-                    try {
-                      onTouch = smartForm.onTouch.trim() ? JSON.parse(smartForm.onTouch) : undefined;
-                    } catch (e) {
-                      setSmartCreateStatus({ type: 'error', message: 'Invalid onTouch JSON format' });
-                      return;
-                    }
-
-                    setSmartCreateStatus({ type: null, message: 'Creating smart block...' });
-
-                    const res = await fetch('/api/smart-blocks/create', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        name: smartForm.name,
-                        textures: {
-                          ...(smartForm.side ? { side: smartForm.side } : {}),
-                          ...(smartForm.top ? { top: smartForm.top } : {}),
-                          ...(smartForm.bottom ? { bottom: smartForm.bottom } : {}),
-                        },
-                        onClick,
-                        onTouch,
-                      }),
-                    });
-
-                    if (!res.ok) {
-                      const errorData = await res.json().catch(() => ({}));
-                      setSmartCreateStatus({ type: 'error', message: `Server error: ${errorData.message || res.statusText}` });
-                      return;
-                    }
-
-                    await res.json();
-                    setSmartCreateStatus({ type: 'success', message: `Smart block "${smartForm.name}" created successfully!` });
-
-                    // Reload smart definitions and update UI
-                    try {
-                      console.log('Reloading smart blocks...');
-                      const res2 = await fetch('/api/smart-blocks');
-                      const data = (await res2.json()) as SmartBlocksResponse;
-                      const defs = data.blocks ?? [];
-                      console.log('Loaded smart blocks:', defs);
-                      smartDefsRef.current = defs;
-                      const merged: BlockTypeRegistry = { ...defaultBlockTypes };
-                      for (const d of defs) {
-                        console.log(`Adding smart block to registry: ${d.id}`, d);
-                        merged[d.id] = { id: d.id, name: d.name, textures: d.textures as any, fallbackColor: '#cccccc' };
-                      }
-                      console.log('Updated block types registry:', Object.keys(merged));
-                      setAllBlockTypes(merged);
-                      blockFactoryRef.current?.setBlockTypes(merged);
-                      const { SmartSpecialBlock } = await import('./core/blocks/special/SmartSpecialBlock');
-                      for (const d of defs) {
-                        console.log(`Registering smart block behavior: ${d.id}`);
-                        specialManagerRef.current?.register(d.id, (ctx: any, _mesh: any) => new SmartSpecialBlock(ctx, d));
-                      }
-                      setSmartCreateStatus({ type: 'success', message: `Smart block "${smartForm.name}" created and loaded!` });
-                    } catch (e) {
-                      console.error('Failed to reload smart blocks:', e);
-                      setSmartCreateStatus({ type: 'error', message: 'Created but failed to reload. Try refreshing.' });
-                    }
-
-                    // Close modal after success
-                    setTimeout(() => {
-                      setShowSmartCreate(false);
-                      setSmartCreateStatus({ type: null, message: '' });
-                    }, 2000);
-                  } catch (e) {
-                    console.warn('Create smart block failed', e);
-                    setSmartCreateStatus({ type: 'error', message: `Network error: ${e instanceof Error ? e.message : 'Unknown error'}` });
-                  }
-                }} style={{ flex: 1, padding: '8px 12px', background: '#4CAF50', color: 'white', border: 'none' }}>Create</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <SmartBlockCreateModal
+          visible={true}
+          form={smartForm}
+          status={smartCreateStatus}
+          onChangeForm={setSmartForm as any}
+          onClose={() => { setShowSmartCreate(false); setSmartCreateStatus({ type: null, message: '' }); }}
+          onSubmit={async () => {
+            setSmartCreateStatus({ type: null, message: '' });
+            try {
+              if (!smartForm.name.trim()) {
+                setSmartCreateStatus({ type: 'error', message: 'Name is required' });
+                return;
+              }
+              if (!smartForm.side && !smartForm.top && !smartForm.bottom) {
+                setSmartCreateStatus({ type: 'error', message: 'At least one texture (side/top/bottom) is required' });
+                return;
+              }
+              let onClick, onTouch;
+              try { onClick = smartForm.onClick.trim() ? JSON.parse(smartForm.onClick) : undefined; } catch (e) { setSmartCreateStatus({ type: 'error', message: 'Invalid onClick JSON format' }); return; }
+              try { onTouch = smartForm.onTouch.trim() ? JSON.parse(smartForm.onTouch) : undefined; } catch (e) { setSmartCreateStatus({ type: 'error', message: 'Invalid onTouch JSON format' }); return; }
+              setSmartCreateStatus({ type: null, message: 'Creating smart block...' });
+              const res = await fetch('/api/smart-blocks/create', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+                  name: smartForm.name,
+                  textures: { ...(smartForm.side ? { side: smartForm.side } : {}), ...(smartForm.top ? { top: smartForm.top } : {}), ...(smartForm.bottom ? { bottom: smartForm.bottom } : {}) },
+                  onClick, onTouch,
+                }),
+              });
+              if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                setSmartCreateStatus({ type: 'error', message: `Server error: ${errorData.message || res.statusText}` });
+                return;
+              }
+              await res.json();
+              setSmartCreateStatus({ type: 'success', message: `Smart block "${smartForm.name}" created successfully!` });
+              try {
+                const res2 = await fetch('/api/smart-blocks');
+                const data = (await res2.json()) as SmartBlocksResponse;
+                const defs = data.blocks ?? [];
+                smartDefsRef.current = defs;
+                const merged: BlockTypeRegistry = { ...defaultBlockTypes };
+                for (const d of defs) { merged[d.id] = { id: d.id, name: d.name, textures: d.textures as any, fallbackColor: '#cccccc' }; }
+                setAllBlockTypes(merged);
+                blockFactoryRef.current?.setBlockTypes(merged);
+                const { SmartSpecialBlock } = await import('./core/blocks/special/SmartSpecialBlock');
+                for (const d of defs) { specialManagerRef.current?.register(d.id, (ctx: any, _mesh: any) => new SmartSpecialBlock(ctx, d)); }
+                setSmartCreateStatus({ type: 'success', message: `Smart block "${smartForm.name}" created and loaded!` });
+              } catch (e) {
+                setSmartCreateStatus({ type: 'error', message: 'Created but failed to reload. Try refreshing.' });
+              }
+              setTimeout(() => { setShowSmartCreate(false); setSmartCreateStatus({ type: null, message: '' }); }, 2000);
+            } catch (e) {
+              setSmartCreateStatus({ type: 'error', message: `Network error: ${e instanceof Error ? e.message : 'Unknown error'}` });
+            }
+          }}
+        />
       )}
       
       {/* Crosshair hidden for third-person */}
@@ -1990,261 +1546,42 @@ function VoxelGame() {
         </div>
       )}
 
-      {/* Mobile joystick and controls - always visible on mobile */}
-      {isMobile && !sceneError && (
-        <>
-          {/* Virtual Joystick */}
-          <div
-            ref={joystickRef}
-            onTouchStart={handleJoystickStart}
-            onTouchMove={handleJoystickMove}
-            onTouchEnd={handleJoystickEnd}
-            style={{
-              position: 'absolute',
-              bottom: '30px',
-              left: '30px',
-              width: '120px',
-              height: '120px',
-              background: 'rgba(255,255,255,0.2)',
-              border: '3px solid rgba(255,255,255,0.5)',
-              borderRadius: '50%',
-              zIndex: 1000,
-              touchAction: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            {/* Joystick knob */}
-            <div
-              style={{
-                width: '40px',
-                height: '40px',
-                background: 'rgba(255,255,255,0.8)',
-                border: '2px solid white',
-                borderRadius: '50%',
-                transform: `translate(${joystickPosition.x}px, ${joystickPosition.y}px)`,
-                transition: isJoystickActive ? 'none' : 'transform 0.2s ease',
-                pointerEvents: 'none'
-              }}
-            />
-          </div>
-
-          {/* Action buttons */}
-          <div style={{
-            position: 'absolute',
-            bottom: '30px',
-            right: '30px',
-            zIndex: 1000,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '15px'
-          }}>
-            <button
-              onTouchStart={handleMobileJump}
-              style={{
-                background: 'rgba(255,255,255,0.3)',
-                border: '3px solid rgba(255,255,255,0.6)',
-                borderRadius: '50%',
-                color: 'white',
-                width: '60px',
-                height: '60px',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                touchAction: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              JUMP
-            </button>
-            <button
-              onTouchStart={(e) => {
-                e.preventDefault();
-                const newState = { ...mobileMoveState, sprint: true };
-                setMobileMoveState(newState);
-                mobileMoveStateRef.current = newState;
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                const newState = { ...mobileMoveState, sprint: false };
-                setMobileMoveState(newState);
-                mobileMoveStateRef.current = newState;
-              }}
-              style={{
-                background: 'rgba(255,255,255,0.3)',
-                border: '3px solid rgba(255,255,255,0.6)',
-                borderRadius: '50%',
-                color: 'white',
-                width: '60px',
-                height: '60px',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                touchAction: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              SPRINT
-            </button>
-          </div>
-        </>
+      {/* Mobile joystick and controls */}
+      {!sceneError && (
+        <MobileControls
+          isMobile={isMobile}
+          joystickRef={joystickRef}
+          joystickPosition={joystickPosition}
+          isJoystickActive={isJoystickActive}
+          onJoystickStart={handleJoystickStart}
+          onJoystickMove={handleJoystickMove}
+          onJoystickEnd={handleJoystickEnd}
+          onJump={handleMobileJump}
+          onSprintStart={(e) => {
+            e.preventDefault();
+            const newState = { ...mobileMoveState, sprint: true };
+            setMobileMoveState(newState);
+            mobileMoveStateRef.current = newState;
+          }}
+          onSprintEnd={(e) => {
+            e.preventDefault();
+            const newState = { ...mobileMoveState, sprint: false };
+            setMobileMoveState(newState);
+            mobileMoveStateRef.current = newState;
+          }}
+        />
       )}
 
-      {/* Builder Management Modal */}
       {showBuilderManagement && worldConfig && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0,0,0,0.7)',
-          zIndex: 2000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px'
-        }}>
-          <div style={{
-            width: '100%',
-            maxWidth: '500px',
-            background: '#111',
-            color: 'white',
-            borderRadius: '10px',
-            padding: '20px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
-          }}>
-            <h3 style={{ marginTop: 0, marginBottom: '20px' }}>
-              👥 Manage Builders - {worldConfig.worldName}
-            </h3>
-            
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '14px', marginBottom: '10px', opacity: 0.8 }}>
-                Building Permission: <strong>{worldConfig.buildingPermission === 'public' ? '🌍 Public' : '🔒 Restricted'}</strong>
-              </div>
-              <div style={{ fontSize: '12px', marginBottom: '15px', opacity: 0.7 }}>
-                {worldConfig.buildingPermission === 'public' 
-                  ? 'Anyone can build in this world'
-                  : 'Only the owner and builders can build in this world'
-                }
-              </div>
-            </div>
-
-            {worldConfig.buildingPermission === 'restricted' && (
-              <>
-                <div style={{ marginBottom: '15px' }}>
-                  <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
-                    Add Builder:
-                  </label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input
-                      value={builderInput}
-                      onChange={(e) => setBuilderInput(e.target.value)}
-                      placeholder="Enter username..."
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        borderRadius: '5px',
-                        border: '1px solid #555',
-                        background: '#222',
-                        color: 'white',
-                        fontSize: '14px'
-                      }}
-                      onKeyPress={(e) => e.key === 'Enter' && addBuilder()}
-                    />
-                    <button
-                      onClick={addBuilder}
-                      disabled={!builderInput.trim()}
-                      style={{
-                        padding: '8px 16px',
-                        background: builderInput.trim() ? '#4CAF50' : '#666',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: builderInput.trim() ? 'pointer' : 'not-allowed',
-                        fontSize: '14px',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: '20px' }}>
-                  <div style={{ fontSize: '14px', marginBottom: '10px' }}>
-                    Current Builders ({worldConfig.builders.length}):
-                  </div>
-                  {worldConfig.builders.length === 0 ? (
-                    <div style={{ 
-                      padding: '10px', 
-                      background: 'rgba(255,255,255,0.1)', 
-                      borderRadius: '5px',
-                      fontSize: '12px',
-                      opacity: 0.7,
-                      textAlign: 'center'
-                    }}>
-                      No builders added yet
-                    </div>
-                  ) : (
-                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                      {worldConfig.builders.map((builder, index) => (
-                        <div
-                          key={index}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '8px',
-                            background: 'rgba(255,255,255,0.1)',
-                            borderRadius: '5px',
-                            marginBottom: '5px'
-                          }}
-                        >
-                          <span style={{ fontSize: '14px' }}>👤 {builder}</span>
-                          <button
-                            onClick={() => removeBuilder(builder)}
-                            style={{
-                              padding: '4px 8px',
-                              background: '#f44336',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '3px',
-                              cursor: 'pointer',
-                              fontSize: '12px'
-                            }}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowBuilderManagement(false)}
-                style={{
-                  padding: '10px 20px',
-                  background: '#666',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <BuilderManagementModal
+          visible={true}
+          worldConfig={worldConfig}
+          builderInput={builderInput}
+          onChangeBuilderInput={setBuilderInput}
+          onAddBuilder={addBuilder}
+          onRemoveBuilder={removeBuilder}
+          onClose={() => setShowBuilderManagement(false)}
+        />
       )}
       
       {!sceneError && <canvas ref={canvasRef} style={{ 

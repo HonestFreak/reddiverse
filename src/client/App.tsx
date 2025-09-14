@@ -1,7 +1,7 @@
-import VoxelGame from './VoxelGame';
+import GameScreen from './GameScreen';
 
 function App() {
-  return <VoxelGame />;
+  return <GameScreen />;
 }
 
 export default App;
