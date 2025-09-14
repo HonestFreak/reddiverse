@@ -141,9 +141,16 @@ router.post('/internal/menu/start-world-create', async (_req, res): Promise<void
           fields: [
             {
               type: 'string',
+              name: 'postTitle',
+              label: 'Post Title',
+              helpText: 'This will be displayed as the post title',
+              required: true,
+            },
+            {
+              type: 'string',
               name: 'worldName',
               label: 'World Name',
-              helpText: 'This will be displayed as the post title',
+              helpText: 'This will be displayed as the app name in the splash screen',
               required: true,
             },
             {
@@ -212,11 +219,17 @@ function hashToInt32(input: string): number {
 router.post('/internal/form/world-config-create', async (req, res): Promise<void> => {
   try {
     const { postId } = context;
+    const postTitle = String(((req.body as any)?.postTitle ?? '')).trim();
     const worldName = String(((req.body as any)?.worldName ?? '')).trim();
     const terrainType = ((req.body as any)?.terrainType?.[0] ?? 'greenery') as TerrainType;
     const seedRaw = String(((req.body as any)?.seed ?? '')).trim();
     const buildingPermission = ((req.body as any)?.buildingPermission?.[0] ?? 'public') as 'public' | 'restricted';
     const buildersRaw = String(((req.body as any)?.builders ?? '')).trim();
+    
+    if (!postTitle) {
+      res.json({ showToast: 'Post title is required' });
+      return;
+    }
     
     if (!worldName) {
       res.json({ showToast: 'World name is required' });
@@ -257,7 +270,7 @@ router.post('/internal/form/world-config-create', async (req, res): Promise<void
     }
 
     // If invoked from subreddit menu (no postId), create a post first
-    const post = await createPost(config, worldName);
+    const post = await createPost(config, postTitle, worldName);
     await redis.set(worldConfigKey(post.id), JSON.stringify(config));
     res.json({
       showToast: `World created: ${worldName} (${terrainType})`,
