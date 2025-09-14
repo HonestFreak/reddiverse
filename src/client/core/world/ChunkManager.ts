@@ -219,7 +219,6 @@ export class ChunkManager {
     try {
       const isGreen = this.surfaceBlockId === 'grass';
       if (isGreen) {
-        // Sea level at ~30% of max height (tweakable)
         const seaLevel = 9;
         const waterOverlay = await buildWaterOverlayInstancedMesh(
           data,
