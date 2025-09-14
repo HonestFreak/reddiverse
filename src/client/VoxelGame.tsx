@@ -16,6 +16,8 @@ import { SpecialBlocksManager } from './core/blocks/special/SpecialBlocksManager
 import { LightBlock } from './core/blocks/special/LightBlock';
 import { JumperBlock } from './core/blocks/special/JumperBlock';
 import { WaterBlock } from './core/blocks/special/WaterBlock';
+import { SkyManager } from './core/sky/SkyManager';
+import { TimeManager } from './core/sky/TimeManager';
 
 function VoxelGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -56,6 +58,7 @@ function VoxelGame() {
     onClick: string;
     onTouch: string;
   }>({ name: '', side: null, top: null, bottom: null, onClick: '', onTouch: '' });
+  const skyManagerRef = useRef<SkyManager | null>(null);
   const blockFactoryRef = useRef<BlockFactory | null>(null);
   const specialManagerRef = useRef<SpecialBlocksManager | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
@@ -297,7 +300,18 @@ function VoxelGame() {
     // Scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87ceeb);
+    // Add distance fog to blend far terrain into the sky color
+    scene.fog = new THREE.Fog(0x87ceeb, 120, 350);
     console.log('Scene created successfully');
+
+    // Initialize sky system
+    const skyMgr = new SkyManager(scene);
+    const timeMgr = new TimeManager({
+      // No need for timeScale or cycleDuration - using real-world time sync
+      startTime: 0.5, // This will be overridden by real-world time
+    });
+    skyManagerRef.current = skyMgr;
+    console.log('Sky system initialized');
 
     // Camera
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -389,11 +403,9 @@ function VoxelGame() {
     const cameraHeight = 1.6;
 
     // Enhanced lighting for better visibility
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight.position.set(20, 30, 20);
-    dirLight.castShadow = false; // Keep shadows off for performance
-    scene.add(dirLight);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    ambientLight.name = 'ambientLight';
+    scene.add(ambientLight);
     
     // Additional hemisphere light for more even lighting
     const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a7c59, 0.6);
@@ -1247,6 +1259,15 @@ function VoxelGame() {
       const delta = Math.min(0.05, clock.getDelta());
       updatePhysics(delta);
       if (specialManager) specialManager.update(delta);
+      
+      // Update sky system
+      if (timeMgr && skyMgr) {
+        const timeOfDay = timeMgr.update();
+        skyMgr.updateTimeOfDay(timeOfDay);
+        skyMgr.updatePlayerPosition(controller.playerBase);
+        skyMgr.update(delta);
+      }
+      
       // Stream chunks around player base
       void streamer.ensureAroundWorld(controller.playerBase.x, controller.playerBase.z);
       renderer.render(scene, camera);
@@ -1362,6 +1383,7 @@ function VoxelGame() {
       if (blocksPollInterval) window.clearInterval(blocksPollInterval);
       if (playerStatePollInterval) window.clearInterval(playerStatePollInterval);
       if (realtimeConnection) realtimeConnection.disconnect().catch(() => {});
+      if (skyMgr) skyMgr.dispose();
       input.detach();
     };
     };
@@ -1661,6 +1683,7 @@ function VoxelGame() {
               - Remove
             </button>
           </div>
+
         </div>
       )}
 
