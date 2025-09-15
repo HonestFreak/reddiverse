@@ -83,7 +83,7 @@ export const defaultBlockTypes: BlockTypeRegistry = {
     id: 'jumper',
     name: 'Jumper',
     textures: {
-      top: { type: 'color', value: '#6a5acd' },
+      top: { type: 'image', value: '/jumper_top.png' },
       side: { type: 'color', value: '#6a5acd' },
       bottom: { type: 'color', value: '#6a5acd' }
     },
@@ -108,6 +108,26 @@ export const defaultBlockTypes: BlockTypeRegistry = {
       bottom: { type: 'image', value: '/leaf.png' }
     },
     fallbackColor: '#3ba84a'
+  },
+  cactus: {
+    id: 'cactus',
+    name: 'Cactus',
+    textures: {
+      top: { type: 'image', value: '/cactus.png' },
+      side: { type: 'image', value: '/cactus.png' },
+      bottom: { type: 'image', value: '/cactus.png' }
+    },
+    fallbackColor: '#3ba84a'
+  },
+  chiseled_stone: {
+    id: 'chiseled_stone',
+    name: 'Chiseled Stone',
+    textures: {
+      top: { type: 'image', value: '/chiseled_stone.png' },
+      side: { type: 'image', value: '/chiseled_stone.png' },
+      bottom: { type: 'image', value: '/chiseled_stone.png' }
+    },
+    fallbackColor: '#8a8a8a'
   }
 };
 

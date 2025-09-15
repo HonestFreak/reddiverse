@@ -386,7 +386,7 @@ function VoxelGame() {
     // Set up jump function for mobile
     jumpRef.current = () => {
       if (canJump) {
-        velocity.y += 12;
+        velocity.y += 18;
         canJump = false;
       }
     };
@@ -820,17 +820,15 @@ function VoxelGame() {
       scene.add(testCubeLine);
     }
 
-    // Player collision box visualization
+    // Player collision sphere visualization
     let playerCollisionBox: THREE.LineSegments | null = null;
     if (defaultGameConfig.render.showCollisionOutlines) {
-      const playerHeight = defaultGameConfig.controls.playerHeight;
-      const playerWidth = 0.6; // Approximate player width
-      const playerDepth = 0.6; // Approximate player depth
+      const playerRadius = 0.4; // Match the actual player sphere radius
       
-      const playerBoxGeo = new THREE.BoxGeometry(playerWidth, playerHeight, playerDepth);
-      const playerBoxEdges = new THREE.EdgesGeometry(playerBoxGeo);
+      const playerSphereGeo = new THREE.SphereGeometry(playerRadius, 16, 12);
+      const playerSphereEdges = new THREE.EdgesGeometry(playerSphereGeo);
       playerCollisionBox = new THREE.LineSegments(
-        playerBoxEdges,
+        playerSphereEdges,
         new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 })
       );
       scene.add(playerCollisionBox);
@@ -962,7 +960,7 @@ function VoxelGame() {
           moveState.sprint = true; break;
         case 'Space':
           if (canJump) {
-            velocity.y += 12;
+            velocity.y += 18;
             canJump = false;
           }
           break;
@@ -1046,10 +1044,18 @@ function VoxelGame() {
       // Update self avatar position
       if (selfGroup) selfGroup.position.copy(controller.playerBase);
       
-      // Update player collision box visualization
+      // Update self shadow position (always at ground level)
+      if (selfShadow) {
+        const gx = Math.round(controller.playerBase.x);
+        const gz = Math.round(controller.playerBase.z);
+        const groundY = heightAt(gx, gz) + 0.5; // Top surface of terrain blocks
+        selfShadow.position.set(controller.playerBase.x, groundY + 0.01, controller.playerBase.z);
+      }
+      
+      // Update player collision sphere visualization
       if (playerCollisionBox) {
         playerCollisionBox.position.copy(controller.playerBase);
-        playerCollisionBox.position.y += defaultGameConfig.controls.playerHeight / 2; // Center the box on the player (playerBase is at feet)
+        playerCollisionBox.position.y += 0.4; // Center the sphere on the player (playerBase is at feet, sphere radius is 0.4)
       }
       
       // Update ground collision indicator
@@ -1067,6 +1073,7 @@ function VoxelGame() {
     // Remote players state
     const remotePlayers = new Map<string, THREE.Group>();
     let selfGroup: THREE.Group | null = null;
+    let selfShadow: THREE.Mesh | null = null;
     let selfUsername: string | null = null;
     let postId: string | null = null;
     let realtimeConnection: { disconnect: () => Promise<void> } | null = null;
@@ -1115,8 +1122,22 @@ function VoxelGame() {
           new THREE.MeshLambertMaterial({ color: hashColorFromString(user) })
         );
         body.position.set(0, 0.4, 0);
+        
+        // Create player shadow
+        const shadowGeometry = new THREE.CircleGeometry(0.3, 16);
+        const shadowMaterial = new THREE.MeshBasicMaterial({ 
+          color: 0x000000, 
+          transparent: true, 
+          opacity: 0.3,
+          side: THREE.DoubleSide
+        });
+        const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+        shadow.position.set(0, 0.01, 0); // Slightly above ground to avoid z-fighting
+        shadow.rotation.x = -Math.PI / 2; // Rotate to lie flat on ground
+        
         const label = makeNameSprite(user);
         group.add(body);
+        group.add(shadow);
         group.add(label);
         scene.add(group);
         remotePlayers.set(user, group);
@@ -1161,11 +1182,26 @@ function VoxelGame() {
             new THREE.MeshLambertMaterial({ color: hashColorFromString(selfUsername) })
           );
           body.position.set(0, 0.4, 0);
+          
           const label = makeNameSprite(selfUsername);
           selfGroup.add(body);
           selfGroup.add(label);
           selfGroup.position.copy(controller.playerBase);
           scene.add(selfGroup);
+        }
+        
+        // Create separate shadow for self player
+        if (selfUsername && !selfShadow) {
+          const shadowGeometry = new THREE.CircleGeometry(0.3, 16);
+          const shadowMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x000000, 
+            transparent: true, 
+            opacity: 0.3,
+            side: THREE.DoubleSide
+          });
+          selfShadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+          selfShadow.rotation.x = -Math.PI / 2; // Rotate to lie flat on ground
+          scene.add(selfShadow);
         }
 
         // Join

@@ -344,7 +344,7 @@ export function useVoxelGame(): VoxelGameHook {
       const moveState = { forward: false, backward: false, left: false, right: false, sprint: false };
       const rotationState = { left: false, right: false };
       let canJump = false;
-      jumpRef.current = () => { if (canJump) { velocity.y += 12; canJump = false; } };
+      jumpRef.current = () => { if (canJump) { velocity.y += 18; canJump = false; } };
       let lastTouchX = 0;
       let lastTouchY = 0;
       let isTouchActive = false;
@@ -585,11 +585,10 @@ export function useVoxelGame(): VoxelGameHook {
       }
       let playerCollisionBox: THREE.LineSegments | null = null;
       if (defaultGameConfig.render.showCollisionOutlines) {
-        const playerHeight = defaultGameConfig.controls.playerHeight;
-        const playerWidth = 0.6; const playerDepth = 0.6;
-        const playerBoxGeo = new THREE.BoxGeometry(playerWidth, playerHeight, playerDepth);
-        const playerBoxEdges = new THREE.EdgesGeometry(playerBoxGeo);
-        playerCollisionBox = new THREE.LineSegments(playerBoxEdges, new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 }));
+        const playerRadius = 0.4; // Match the actual player sphere radius
+        const playerSphereGeo = new THREE.SphereGeometry(playerRadius, 16, 12);
+        const playerSphereEdges = new THREE.EdgesGeometry(playerSphereGeo);
+        playerCollisionBox = new THREE.LineSegments(playerSphereEdges, new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 }));
         scene.add(playerCollisionBox);
       }
       let groundCollisionIndicator: THREE.LineSegments | null = null;
@@ -644,7 +643,7 @@ export function useVoxelGame(): VoxelGameHook {
           case 'ArrowDown': case 'KeyS': moveState.backward = true; break;
           case 'ArrowRight': case 'KeyD': rotationState.right = true; break;
           case 'ShiftLeft': case 'ShiftRight': moveState.sprint = true; break;
-          case 'Space': if (canJump) { velocity.y += 12; canJump = false; } break;
+          case 'Space': if (canJump) { velocity.y += 18; canJump = false; } break;
         }
       }
       function onKeyUp(event: KeyboardEvent) {
@@ -688,7 +687,16 @@ export function useVoxelGame(): VoxelGameHook {
         yaw = controller.yaw; pitch = controller.pitch;
         // Keep local avatar in sync with player position
         if (selfGroup) { selfGroup.position.copy(controller.playerBase); }
-        if (playerCollisionBox) { playerCollisionBox.position.copy(controller.playerBase); playerCollisionBox.position.y += defaultGameConfig.controls.playerHeight / 2; }
+        
+        // Update self shadow position (always at ground level)
+        if (selfShadow) {
+          const gx = Math.round(controller.playerBase.x);
+          const gz = Math.round(controller.playerBase.z);
+          const groundY = heightAt(gx, gz) + 0.5; // Top surface of terrain blocks
+          selfShadow.position.set(controller.playerBase.x, groundY + 0.01, controller.playerBase.z);
+        }
+        
+        if (playerCollisionBox) { playerCollisionBox.position.copy(controller.playerBase); playerCollisionBox.position.y += 0.4; }
         if (groundCollisionIndicator) {
           const gx = Math.round(controller.playerBase.x); const gz = Math.round(controller.playerBase.z);
           const groundY = heightAt(gx, gz) + 0.5; groundCollisionIndicator.position.set(gx, groundY, gz);
@@ -696,7 +704,7 @@ export function useVoxelGame(): VoxelGameHook {
       }
 
       const remotePlayers = new Map<string, THREE.Group>();
-      let selfGroup: THREE.Group | null = null; let selfUsername: string | null = null; let postId: string | null = null; let realtimeConnection: { disconnect: () => Promise<void> } | null = null;
+      let selfGroup: THREE.Group | null = null; let selfShadow: THREE.Mesh | null = null; let selfUsername: string | null = null; let postId: string | null = null; let realtimeConnection: { disconnect: () => Promise<void> } | null = null;
       let posInterval: number | null = null; let presencePollInterval: number | null = null; let blocksPollInterval: number | null = null; let playerStatePollInterval: number | null = null;
 
       function hashColorFromString(str: string): number {
@@ -709,8 +717,32 @@ export function useVoxelGame(): VoxelGameHook {
         const tex = new THREE.CanvasTexture(canvas); tex.needsUpdate = true; const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false }); const sprite = new THREE.Sprite(mat); sprite.scale.set(1.0, 0.5, 1); sprite.position.set(0, 1.1, 0); return sprite;
       }
       function addOrUpdateRemote(user: string, position: PlayerPosition): void {
-        if (user === selfUsername) return; let group = remotePlayers.get(user);
-        if (!group) { group = new THREE.Group(); const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, 20, 20), new THREE.MeshLambertMaterial({ color: hashColorFromString(user) })); body.position.set(0, 0.4, 0); const label = makeNameSprite(user); group.add(body); group.add(label); scene.add(group); remotePlayers.set(user, group); }
+        if (user === selfUsername) return; 
+        let group = remotePlayers.get(user);
+        if (!group) { 
+          group = new THREE.Group(); 
+          const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, 20, 20), new THREE.MeshLambertMaterial({ color: hashColorFromString(user) })); 
+          body.position.set(0, 0.4, 0); 
+          
+          // Create player shadow
+          const shadowGeometry = new THREE.CircleGeometry(0.3, 16);
+          const shadowMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x000000, 
+            transparent: true, 
+            opacity: 0.3,
+            side: THREE.DoubleSide
+          });
+          const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+          shadow.position.set(0, 0.01, 0); // Slightly above ground to avoid z-fighting
+          shadow.rotation.x = -Math.PI / 2; // Rotate to lie flat on ground
+          
+          const label = makeNameSprite(user); 
+          group.add(body); 
+          group.add(shadow);
+          group.add(label); 
+          scene.add(group); 
+          remotePlayers.set(user, group); 
+        }
         group.position.set(position.x, position.y, position.z);
       }
       function removeRemote(user: string): void { const group = remotePlayers.get(user); if (group) { scene.remove(group); remotePlayers.delete(user); } }
@@ -720,7 +752,31 @@ export function useVoxelGame(): VoxelGameHook {
         try {
           const initRes = await fetch('/api/init'); const initData = await initRes.json(); selfUsername = initData.username as string; postId = initData.postId as string;
           try { const pr = await fetch('/api/presence'); const pdata = await pr.json(); const players = (pdata.players ?? []) as { user: string; position: PlayerPosition }[]; players.forEach((p) => addOrUpdateRemote(p.user, p.position)); } catch (_) {}
-          if (selfUsername && !selfGroup) { selfGroup = new THREE.Group(); const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, 20, 20), new THREE.MeshLambertMaterial({ color: hashColorFromString(selfUsername) })); body.position.set(0, 0.4, 0); const label = makeNameSprite(selfUsername); selfGroup.add(body); selfGroup.add(label); selfGroup.position.copy(controller.playerBase); scene.add(selfGroup); }
+          if (selfUsername && !selfGroup) { 
+            selfGroup = new THREE.Group(); 
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, 20, 20), new THREE.MeshLambertMaterial({ color: hashColorFromString(selfUsername) })); 
+            body.position.set(0, 0.4, 0); 
+            
+            const label = makeNameSprite(selfUsername); 
+            selfGroup.add(body); 
+            selfGroup.add(label); 
+            selfGroup.position.copy(controller.playerBase); 
+            scene.add(selfGroup); 
+          }
+          
+          // Create separate shadow for self player
+          if (selfUsername && !selfShadow) {
+            const shadowGeometry = new THREE.CircleGeometry(0.3, 16);
+            const shadowMaterial = new THREE.MeshBasicMaterial({ 
+              color: 0x000000, 
+              transparent: true, 
+              opacity: 0.3,
+              side: THREE.DoubleSide
+            });
+            selfShadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+            selfShadow.rotation.x = -Math.PI / 2; // Rotate to lie flat on ground
+            scene.add(selfShadow);
+          }
           await fetch('/api/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ position: getPlayerPosition() }) });
           if (!postId) return;
           try {

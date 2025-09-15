@@ -65,7 +65,7 @@ export const defaultGameConfig: GameConfig = {
     maxLightness: 0.8,
     baseHue: 0.33,
     hueSlope: -0.05,
-    showCollisionOutlines: true,
+    showCollisionOutlines: false,
   },
   controls: {
     playerHeight: 1.7,

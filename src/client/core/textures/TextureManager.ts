@@ -97,7 +97,7 @@ export class TextureManager {
       if (loadedTexture) {
         const material = new THREE.MeshLambertMaterial({ map: loadedTexture });
         // Special handling for cutout foliage
-        if (blockTypeId === 'leaf') {
+        if (blockTypeId === 'leaf' || blockTypeId === 'cactus') {
           material.transparent = true;
           material.alphaTest = 0.4;
           material.depthWrite = true; // keep correct sorting for cutouts

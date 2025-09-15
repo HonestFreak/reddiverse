@@ -51,7 +51,7 @@ export class ThirdPersonController {
     if ((placedBlocks || foliageCells) && moveVector.length() > 0) {
       const newX = this.playerBase.x + moveVector.x;
       const newZ = this.playerBase.z + moveVector.z;
-      const playerRadius = 0.3; // Approximate player radius
+      const playerRadius = 0.4; // Match the actual player sphere radius
       
       let canMoveX = true;
       let canMoveZ = true;
@@ -59,36 +59,55 @@ export class ThirdPersonController {
       const newBlockX = Math.round(newX);
       const newBlockZ = Math.round(newZ);
 
-      // Check collisions vs placed blocks
+      // Check collisions vs placed blocks using sphere-based collision
       if (placedBlocks) {
         for (const block of placedBlocks) {
           const blockPos = block.position;
-          const blockX = Math.round(blockPos.x);
-          const blockZ = Math.round(blockPos.z);
+          const blockX = blockPos.x;
+          const blockZ = blockPos.z;
           const blockY = blockPos.y;
 
-          if (newBlockX === blockX && Math.round(this.playerBase.z) === blockZ) {
-            const playerBottom = this.playerBase.y;
-            const playerTop = this.playerBase.y + playerHeight;
-            const blockBottom = blockY - 0.5;
-            const blockTop = blockY + 0.5;
-            if (playerTop > blockBottom && playerBottom < blockTop) canMoveX = false;
+          // Check X movement collision
+          const playerCenterY = this.playerBase.y + playerRadius;
+          const distanceToBlockX = Math.abs(newX - blockX);
+          const distanceToBlockY = Math.abs(playerCenterY - blockY);
+          const distanceToBlockZ = Math.abs(this.playerBase.z - blockZ);
+          
+          // Check if sphere intersects with block for X movement
+          if (distanceToBlockX < 0.5 + playerRadius && 
+              distanceToBlockY < 0.5 + playerRadius && 
+              distanceToBlockZ < 0.5 + playerRadius) {
+            canMoveX = false;
           }
-          if (Math.round(this.playerBase.x) === blockX && newBlockZ === blockZ) {
-            const playerBottom = this.playerBase.y;
-            const playerTop = this.playerBase.y + playerHeight;
-            const blockBottom = blockY - 0.5;
-            const blockTop = blockY + 0.5;
-            if (playerTop > blockBottom && playerBottom < blockTop) canMoveZ = false;
+
+          // Check Z movement collision
+          const distanceToBlockXZ = Math.abs(this.playerBase.x - blockX);
+          const distanceToBlockZZ = Math.abs(newZ - blockZ);
+          
+          // Check if sphere intersects with block for Z movement
+          if (distanceToBlockXZ < 0.5 + playerRadius && 
+              distanceToBlockY < 0.5 + playerRadius && 
+              distanceToBlockZZ < 0.5 + playerRadius) {
+            canMoveZ = false;
           }
         }
       }
 
-      // Check collisions vs foliage cells (treated as solid cubes)
+      // Check collisions vs foliage cells using sphere-based collision
       if (foliageCells) {
-        const keyX = `${newBlockX},${Math.round(this.playerBase.y)},${Math.round(this.playerBase.z)}`;
-        const keyZ = `${Math.round(this.playerBase.x)},${Math.round(this.playerBase.y)},${newBlockZ}`;
+        const playerCenterY = this.playerBase.y + playerRadius;
+        
+        // Check X movement collision with foliage
+        const foliageX = Math.round(newX);
+        const foliageY = Math.round(playerCenterY);
+        const foliageZ = Math.round(this.playerBase.z);
+        const keyX = `${foliageX},${foliageY},${foliageZ}`;
         if (foliageCells.has(keyX)) canMoveX = false;
+        
+        // Check Z movement collision with foliage
+        const foliageXZ = Math.round(this.playerBase.x);
+        const foliageZZ = Math.round(newZ);
+        const keyZ = `${foliageXZ},${foliageY},${foliageZZ}`;
         if (foliageCells.has(keyZ)) canMoveZ = false;
       }
       
@@ -148,7 +167,7 @@ export class ThirdPersonController {
     }
 
     if (this.input.consumeJump() && (canJumpRef?.current ?? false)) {
-      velocity.y += 12; // jump impulse
+      velocity.y += 18; // jump impulse
       if (canJumpRef) canJumpRef.current = false;
     }
 
