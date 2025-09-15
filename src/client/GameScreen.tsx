@@ -13,6 +13,8 @@ import BlockPaletteModal from './ui/blocks/BlockPaletteModal';
 import MobileControls from './ui/controls/MobileControls';
 // import BuilderManagementModal from './ui/modals/BuilderManagementModal';
 import SmartBlockCreateModal from './ui/modals/SmartBlockCreateModal';
+import DeathOverlay from './ui/overlays/DeathOverlay';
+import WinnerOverlay from './ui/overlays/WinnerOverlay';
 
 export default function GameScreen() {
   const {
@@ -56,6 +58,8 @@ export default function GameScreen() {
     handleMobileSprintEnd,
     // addBlockAtPlayerRef,
     // removeBlockAtPlayerRef,
+    deathOverlayVisible,
+    handleReplay,
   } = useVoxelGame();
 
   // Hotbar favorites: pick a small default set; can be enhanced later to persist
@@ -132,6 +136,11 @@ export default function GameScreen() {
           onSprintEnd={(e) => { e.preventDefault(); handleMobileSprintEnd(); }}
         />
       )}
+
+      {/* Death overlay */}
+      <DeathOverlay visible={deathOverlayVisible} />
+      {/* Winner overlay */}
+      <WinnerOverlay visible={!!playerState?.isWinner} onReplay={handleReplay} />
 
       {/* Builder management deprecated in UI for this pass; could be reintroduced elsewhere */}
 

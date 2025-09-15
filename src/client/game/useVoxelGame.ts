@@ -60,6 +60,8 @@ export type VoxelGameHook = {
   handleMobileSprintEnd: () => void;
   addBlockAtPlayerRef: React.MutableRefObject<() => void>;
   removeBlockAtPlayerRef: React.MutableRefObject<() => void>;
+  deathOverlayVisible: boolean;
+  handleReplay: () => void;
 };
 
 export function useVoxelGame(): VoxelGameHook {
@@ -107,6 +109,14 @@ export function useVoxelGame(): VoxelGameHook {
   const specialManagerRef = useRef<SpecialBlocksManager | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [deathOverlayVisible, setDeathOverlayVisible] = useState<boolean>(false);
+  const handleReplay = () => {
+    // Clear winner, reset to spawn
+    setPlayerState((prev) => ({ ...prev, isWinner: false }));
+    try { resetSpawnRef.current(); } catch (_) {}
+    // Persist clear on server
+    (async () => { try { await fetch('/api/player-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isWinner: false }) }); } catch (_) {} })();
+  };
   const [playerPosition, setPlayerPosition] = useState<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
   const [chunkPosition, setChunkPosition] = useState<{ x: number; z: number }>({ x: 0, z: 0 });
   const selectedBlockTypeRef = useRef(selectedBlockType);
@@ -117,6 +127,8 @@ export function useVoxelGame(): VoxelGameHook {
   const canJumpRef = useRef<boolean>(false);
   const isMobileRef = useRef<boolean>(false);
   const isPostCreatorRef = useRef<boolean>(false);
+  const isDeadRef = useRef<boolean>(false);
+  const resetSpawnRef = useRef<() => void>(() => {});
   const mobileMoveStateRef = useRef({
     forward: false,
     backward: false,
@@ -413,6 +425,7 @@ export function useVoxelGame(): VoxelGameHook {
         camera.position.copy(new THREE.Vector3(camTarget.x, camTarget.y, camTarget.z + cameraDistance));
         camera.lookAt(camTarget);
       }
+      resetSpawnRef.current = resetSpawn;
       resetSpawn();
 
       function getBlockKey(x: number, y: number, z: number): string { return `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`; }
@@ -486,7 +499,10 @@ export function useVoxelGame(): VoxelGameHook {
       function isSolidCell(x: number, y: number, z: number): boolean {
         const rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
         for (const m of placedMeshes) {
-          if (Math.round(m.position.x) === rx && Math.round(m.position.y) === ry && Math.round(m.position.z) === rz) return (m as any).userData.blockType !== 'water';
+          if (Math.round(m.position.x) === rx && Math.round(m.position.y) === ry && Math.round(m.position.z) === rz) {
+            const t = (m as any).userData.blockType;
+            return t !== 'water' && t !== 'lava';
+          }
         }
         if (chunkManager.isTerrainSolidAtWorld(rx, ry, rz)) return true;
         const fc = chunkManager.getFoliageCollisionCells();
@@ -502,6 +518,9 @@ export function useVoxelGame(): VoxelGameHook {
         heightAt: (x: number, z: number) => heightAt(x, z),
         isOccupied: (x: number, y: number, z: number) => isOccupiedCell(x, y, z),
         isSolid: (x: number, y: number, z: number) => isSolidCell(x, y, z),
+        setPlayerStateLocal: (partial: { life?: number; isWinner?: boolean; badge?: string }) => {
+          setPlayerState((prev) => ({ ...prev, ...partial }));
+        },
         placeBlock: async (x: number, y: number, z: number, type: string, extras?: { userData?: Record<string, unknown>; persist?: boolean }) => { await placeBlock(x, y, z, type, { persist: extras?.persist ?? false }); },
         removeBlock: (x: number, y: number, z: number) => removeBlock(x, y, z, { persist: false, force: true }),
         persistBlock: async (x: number, y: number, z: number, type: string, color?: string) => {
@@ -515,6 +534,11 @@ export function useVoxelGame(): VoxelGameHook {
       specialManager.register('light', (ctx, _mesh) => new LightBlock(ctx));
       specialManager.register('jumper', (ctx, _mesh) => new JumperBlock(ctx));
       specialManager.register('water', (ctx, _mesh) => new WaterBlock(ctx));
+      // Kill block: sets player life to 0 on contact
+      const { LavaBlock } = await import('../core/blocks/special/LavaBlock');
+      specialManager.register('lava', (ctx, _mesh) => new LavaBlock(ctx));
+      const { WinnerBlock } = await import('../core/blocks/special/WinnerBlock');
+      specialManager.register('winner', (ctx, _mesh) => new WinnerBlock(ctx));
 
       async function handleBlockInteraction(event: MouseEvent | TouchEvent) {
         const canvas = canvasRef.current; if (!canvas) return;
@@ -728,7 +752,10 @@ export function useVoxelGame(): VoxelGameHook {
           { gravity, walkSpeed, sprintMultiplier, damping, cameraDistance, cameraHeight, playerHeight: defaultGameConfig.controls.playerHeight, canJumpRef },
           velocity,
           heightAt,
-          placedMeshes.filter((m) => (m as any).userData.blockType !== 'water'),
+          placedMeshes.filter((m) => {
+            const t = (m as any).userData.blockType;
+            return t !== 'water' && t !== 'lava';
+          }),
           streamer ? chunkManager.getFoliageCollisionCells() : undefined
         );
         yaw = controller.yaw; pitch = controller.pitch;
@@ -945,6 +972,27 @@ export function useVoxelGame(): VoxelGameHook {
     void run();
   }, []);
 
+  // Detect death and handle respawn + health reset
+  useEffect(() => {
+    if (playerState.life <= 0 && !isDeadRef.current) {
+      isDeadRef.current = true;
+      setDeathOverlayVisible(true);
+      try { resetSpawnRef.current(); } catch (_) {}
+      (async () => {
+        try {
+          await fetch('/api/player-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ life: 100 }) });
+        } catch (_) {}
+        // Optimistically update local state
+        setPlayerState((prev) => ({ ...prev, life: 100 }));
+        // Hide overlay shortly after respawn
+        window.setTimeout(() => { setDeathOverlayVisible(false); }, 1500);
+      })();
+    } else if (playerState.life > 0 && isDeadRef.current) {
+      // Allow future death triggers
+      isDeadRef.current = false;
+    }
+  }, [playerState.life]);
+
   return {
     canvasRef,
     isPointerLocked,
@@ -986,6 +1034,8 @@ export function useVoxelGame(): VoxelGameHook {
     handleMobileSprintEnd,
     addBlockAtPlayerRef,
     removeBlockAtPlayerRef,
+    deathOverlayVisible,
+    handleReplay,
   };
 }
 

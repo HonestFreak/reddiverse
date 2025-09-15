@@ -16,6 +16,7 @@ export type SpecialBlockContext = {
     extras?: { userData?: Record<string, unknown>; persist?: boolean }
   ) => Promise<void>;
   removeBlock: (x: number, y: number, z: number) => void;
+  setPlayerStateLocal?: (partial: { life?: number; isWinner?: boolean; badge?: string }) => void;
   special?: {
     water?: {
       register: (mesh: THREE.Mesh, groupId?: string) => string;
