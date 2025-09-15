@@ -54,6 +54,8 @@ export type VoxelGameHook = {
   handleJoystickMove: (e: React.TouchEvent) => void;
   handleJoystickEnd: (e: React.TouchEvent) => void;
   handleMobileJump: () => void;
+  handleMobileSprintStart: () => void;
+  handleMobileSprintEnd: () => void;
   addBlockAtPlayerRef: React.MutableRefObject<() => void>;
   removeBlockAtPlayerRef: React.MutableRefObject<() => void>;
 };
@@ -98,6 +100,7 @@ export function useVoxelGame(): VoxelGameHook {
     onTouch: string;
   }>({ name: '', side: null, top: null, bottom: null, onClick: '', onTouch: '' });
   const skyManagerRef = useRef<SkyManager | null>(null);
+  const inputRef = useRef<InputManager | null>(null);
   const blockFactoryRef = useRef<BlockFactory | null>(null);
   const specialManagerRef = useRef<SpecialBlocksManager | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
@@ -204,8 +207,9 @@ export function useVoxelGame(): VoxelGameHook {
     const x = Math.cos(angle) * limitedDistance;
     const y = Math.sin(angle) * limitedDistance;
     setJoystickPosition({ x, y });
-    const forward = y > 5;
-    const backward = y < -5;
+    // On screen, up is negative Y, so invert to match forward/back
+    const forward = y < -5;
+    const backward = y > 5;
     const rotateLeft = x < -5;
     const rotateRight = x > 5;
     const newMoveState = { forward, backward, left: false, right: false, sprint: mobileMoveState.sprint };
@@ -229,7 +233,27 @@ export function useVoxelGame(): VoxelGameHook {
   };
 
   const handleMobileJump = () => {
-    jumpRef.current();
+    if (inputRef.current) {
+      inputRef.current.state.jumpPressed = true;
+    }
+  };
+
+  const handleMobileSprintStart = () => {
+    setMobileMoveState(prev => {
+      const next = { ...prev, sprint: true };
+      mobileMoveStateRef.current = next;
+      return next;
+    });
+    if (inputRef.current) inputRef.current.state.sprint = true;
+  };
+
+  const handleMobileSprintEnd = () => {
+    setMobileMoveState(prev => {
+      const next = { ...prev, sprint: false };
+      mobileMoveStateRef.current = next;
+      return next;
+    });
+    if (inputRef.current) inputRef.current.state.sprint = false;
   };
 
   useEffect(() => {
@@ -367,6 +391,7 @@ export function useVoxelGame(): VoxelGameHook {
 
       const input = new InputManager();
       input.attach();
+      inputRef.current = input;
       const controller = new ThirdPersonController(camera, input);
       function resetSpawn() {
         const sx = 0; const sz = 0; const gy = heightAt(Math.round(sx), Math.round(sz)) + 0.5;
@@ -643,6 +668,14 @@ export function useVoxelGame(): VoxelGameHook {
         if (currentMoveState.forward) direction.z -= 1;
         if (currentMoveState.backward) direction.z += 1;
         direction.normalize();
+        // Mirror mobile input into controller's input manager
+        if (isMobileRef.current) {
+          input.state.forward = mobileMoveStateRef.current.forward;
+          input.state.backward = mobileMoveStateRef.current.backward;
+          input.state.rotateLeft = false;
+          input.state.rotateRight = false;
+          input.state.sprint = mobileMoveStateRef.current.sprint;
+        }
         controller.yaw = yaw; controller.pitch = pitch;
         controller.updatePhysics(
           delta,
@@ -833,6 +866,8 @@ export function useVoxelGame(): VoxelGameHook {
     handleJoystickMove,
     handleJoystickEnd,
     handleMobileJump,
+    handleMobileSprintStart,
+    handleMobileSprintEnd,
     addBlockAtPlayerRef,
     removeBlockAtPlayerRef,
   };

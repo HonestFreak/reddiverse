@@ -49,6 +49,8 @@ export default function GameScreen() {
     handleJoystickMove,
     handleJoystickEnd,
     handleMobileJump,
+    handleMobileSprintStart,
+    handleMobileSprintEnd,
     // addBlockAtPlayerRef,
     // removeBlockAtPlayerRef,
   } = useVoxelGame();
@@ -117,8 +119,8 @@ export default function GameScreen() {
           onJoystickMove={handleJoystickMove}
           onJoystickEnd={handleJoystickEnd}
           onJump={handleMobileJump}
-          onSprintStart={(e) => { e.preventDefault(); }}
-          onSprintEnd={(e) => { e.preventDefault(); }}
+          onSprintStart={(e) => { e.preventDefault(); handleMobileSprintStart(); }}
+          onSprintEnd={(e) => { e.preventDefault(); handleMobileSprintEnd(); }}
         />
       )}
 
