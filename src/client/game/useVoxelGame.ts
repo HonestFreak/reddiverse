@@ -11,7 +11,7 @@ import { ThirdPersonController } from '../core/player/ThirdPersonController';
 import { BlockFactory } from '../core/blocks/BlockFactory';
 import { defaultBlockTypes, type BlockTypeRegistry } from '../../shared/types/BlockTypes';
 import type { SmartBlocksResponse, SmartBlockDefinition } from '../../shared/types/SmartBlocks';
-import { getTerrainParamsForPreset, presetSurfaceBlockId } from '../../shared/types/WorldConfig';
+import { getTerrainParamsForPreset } from '../../shared/types/WorldConfig';
 import { SpecialBlocksManager } from '../core/blocks/special/SpecialBlocksManager';
 import { LightBlock } from '../core/blocks/special/LightBlock';
 import { JumperBlock } from '../core/blocks/special/JumperBlock';
@@ -50,6 +50,8 @@ export type VoxelGameHook = {
   setSmartCreateStatus: (s: VoxelGameHook['smartCreateStatus']) => void;
   sceneError: string | null;
   debugLogs: string[];
+  playerPosition: { x: number; y: number; z: number };
+  chunkPosition: { x: number; z: number };
   handleJoystickStart: (e: React.TouchEvent) => void;
   handleJoystickMove: (e: React.TouchEvent) => void;
   handleJoystickEnd: (e: React.TouchEvent) => void;
@@ -105,6 +107,8 @@ export function useVoxelGame(): VoxelGameHook {
   const specialManagerRef = useRef<SpecialBlocksManager | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [playerPosition, setPlayerPosition] = useState<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
+  const [chunkPosition, setChunkPosition] = useState<{ x: number; z: number }>({ x: 0, z: 0 });
   const selectedBlockTypeRef = useRef(selectedBlockType);
   const addBlockAtPlayerRef = useRef<() => void>(() => {});
   const removeBlockAtPlayerRef = useRef<() => void>(() => {});
@@ -377,14 +381,23 @@ export function useVoxelGame(): VoxelGameHook {
 
       const terrainParams = getTerrainParamsForPreset((serverWorldCfg?.terrainType ?? 'greenery'), (serverWorldCfg?.seed ?? defaultGameConfig.terrain.seed));
       const terrain = new TerrainGenerator(terrainParams);
-      const surfaceBlockId = presetSurfaceBlockId(serverWorldCfg?.terrainType ?? 'greenery');
       const snowOverlayCfg = (serverWorldCfg?.terrainType === 'mountains')
         ? { threshold: Math.max(Math.floor(terrainParams.heightScale - 3), Math.floor(terrainParams.heightScale * 0.8)), depth: 2, blockId: 'snow' }
         : undefined;
-      const chunkManager = new ChunkManager(scene, terrain, defaultGameConfig.chunk, defaultGameConfig.render, allBlockTypes, surfaceBlockId, snowOverlayCfg);
+      const chunkManager = new ChunkManager(scene, terrain, defaultGameConfig.chunk, defaultGameConfig.render, allBlockTypes, snowOverlayCfg);
       const blockFactory = new BlockFactory(allBlockTypes);
       blockFactoryRef.current = blockFactory;
-      void chunkManager.ensureChunk(0, 0);
+
+      // Preload the spawn chunk and its immediate 3×3 neighborhood so digging works instantly
+      const spawnX = 320;
+      const spawnZ = 320;
+      const spawnChunkX = Math.floor((spawnX + Math.floor(defaultGameConfig.chunk.sizeX / 2)) / defaultGameConfig.chunk.sizeX);
+      const spawnChunkZ = Math.floor((spawnZ + Math.floor(defaultGameConfig.chunk.sizeZ / 2)) / defaultGameConfig.chunk.sizeZ);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          void chunkManager.ensureChunk(spawnChunkX + dx, spawnChunkZ + dz);
+        }
+      }
       const streamer = new ChunkStreamer(chunkManager, defaultGameConfig.chunk.sizeX, defaultGameConfig.chunk.sizeZ, 1);
 
       function heightAt(x: number, z: number): number { return chunkManager.getSurfaceHeightAt(x, z); }
@@ -394,7 +407,7 @@ export function useVoxelGame(): VoxelGameHook {
       inputRef.current = input;
       const controller = new ThirdPersonController(camera, input);
       function resetSpawn() {
-        const sx = 0; const sz = 0; const gy = heightAt(Math.round(sx), Math.round(sz)) + 0.5;
+        const sx = 320; const sz = 320; const gy = heightAt(Math.round(sx), Math.round(sz)) + 0.5;
         controller.playerBase.set(sx, gy, sz);
         const camTarget = new THREE.Vector3().copy(controller.playerBase).add(new THREE.Vector3(0, cameraHeight, 0));
         camera.position.copy(new THREE.Vector3(camTarget.x, camTarget.y, camTarget.z + cameraDistance));
@@ -862,6 +875,17 @@ export function useVoxelGame(): VoxelGameHook {
           skyMgr.update(delta);
         }
         void streamer.ensureAroundWorld(controller.playerBase.x, controller.playerBase.z);
+        
+        // Update player position for UI display
+        const currentPos = { x: controller.playerBase.x, y: controller.playerBase.y, z: controller.playerBase.z };
+        setPlayerPosition(currentPos);
+        
+        // Calculate chunk position
+        const { sizeX, sizeZ } = defaultGameConfig.chunk;
+        const chunkX = Math.floor((currentPos.x + Math.floor(sizeX / 2)) / sizeX);
+        const chunkZ = Math.floor((currentPos.z + Math.floor(sizeZ / 2)) / sizeZ);
+        setChunkPosition({ x: chunkX, z: chunkZ });
+        
         renderer.render(scene, camera);
       }
       animate();
@@ -952,6 +976,8 @@ export function useVoxelGame(): VoxelGameHook {
     setSmartCreateStatus: (s) => setSmartCreateStatus(s),
     sceneError,
     debugLogs,
+    playerPosition,
+    chunkPosition,
     handleJoystickStart,
     handleJoystickMove,
     handleJoystickEnd,

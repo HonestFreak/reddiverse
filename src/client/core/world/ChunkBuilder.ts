@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ChunkData, indexOf } from './ChunkTypes';
+import { ChunkData, indexOf, ChunkData3D, VoxelKind, voxelIndex, voxelToBlockId } from './ChunkTypes';
 import { RenderConfig } from '../../../shared/config/gameConfig';
 import { BlockFactory } from '../blocks/BlockFactory';
 
@@ -150,4 +150,72 @@ export async function buildWaterOverlayInstancedMesh(
 
   if (instances.length === 0) return null;
   return await blockFactory.createInstancedBlock('water', instances, { showCollisionOutlines: render.showCollisionOutlines });
+}
+
+export async function buildVoxelInstancedMeshes(
+  chunk: ChunkData3D,
+  render: RenderConfig,
+  blockFactory: BlockFactory,
+  isBlockRemoved?: (wx: number, wy: number, wz: number) => boolean,
+  chunkWorldPos?: { x: number; z: number }
+): Promise<{ meshes: Map<string, THREE.InstancedMesh>; outline?: THREE.LineSegments }> {
+  const { sizeX, sizeY, sizeZ, blockSize, voxels } = chunk;
+  const halfX = Math.floor(sizeX / 2);
+  const halfZ = Math.floor(sizeZ / 2);
+
+  const instancesByType = new Map<string, Array<{ position: THREE.Vector3; matrix: THREE.Matrix4 }>>();
+
+  const getKind = (lx: number, ly: number, lz: number): VoxelKind => {
+    if (lx < 0 || ly < 0 || lz < 0 || lx >= sizeX || ly >= sizeY || lz >= sizeZ) return VoxelKind.Air;
+    const wx = (chunkWorldPos ? chunkWorldPos.x : 0) + lx - halfX;
+    const wz = (chunkWorldPos ? chunkWorldPos.z : 0) + lz - halfZ;
+    if (isBlockRemoved && isBlockRemoved(wx, ly, wz)) return VoxelKind.Air;
+    return voxels[voxelIndex(lx, ly, lz, sizeX, sizeY)] as VoxelKind;
+  };
+
+  const isSolid = (k: VoxelKind) => (k === VoxelKind.Grass || k === VoxelKind.Dirt || k === VoxelKind.Stone || k === VoxelKind.Sand || k === VoxelKind.Snow);
+
+  for (let z = 0; z < sizeZ; z++) {
+    for (let y = 0; y < sizeY; y++) {
+      for (let x = 0; x < sizeX; x++) {
+        const kind = getKind(x, y, z);
+        if (kind === VoxelKind.Air) continue;
+
+        const kxp = getKind(x + 1, y, z);
+        const kxm = getKind(x - 1, y, z);
+        const kyp = getKind(x, y + 1, z);
+        const kym = getKind(x, y - 1, z);
+        const kzp = getKind(x, y, z + 1);
+        const kzm = getKind(x, y, z - 1);
+
+        let visible = false;
+        if (kind === VoxelKind.Water) {
+          // Water visible if adjacent to air or solid
+          visible = (kxp === VoxelKind.Air || kxm === VoxelKind.Air || kyp === VoxelKind.Air || kym === VoxelKind.Air || kzp === VoxelKind.Air || kzm === VoxelKind.Air)
+            || isSolid(kxp) || isSolid(kxm) || isSolid(kyp) || isSolid(kym) || isSolid(kzp) || isSolid(kzm);
+        } else {
+          // Solid visible if adjacent to air or water
+          visible = (kxp === VoxelKind.Air || kxm === VoxelKind.Air || kyp === VoxelKind.Air || kym === VoxelKind.Air || kzp === VoxelKind.Air || kzm === VoxelKind.Air)
+            || (kxp === VoxelKind.Water || kxm === VoxelKind.Water || kyp === VoxelKind.Water || kym === VoxelKind.Water || kzp === VoxelKind.Water || kzm === VoxelKind.Water);
+        }
+        if (!visible) continue;
+
+        const blockTypeId = voxelToBlockId(kind);
+        if (blockTypeId === 'air') continue;
+        const arr = instancesByType.get(blockTypeId) ?? [];
+        const position = new THREE.Vector3((x - halfX) * blockSize, y * blockSize, (z - halfZ) * blockSize);
+        const matrix = new THREE.Matrix4();
+        matrix.setPosition(position);
+        arr.push({ position, matrix });
+        instancesByType.set(blockTypeId, arr);
+      }
+    }
+  }
+
+  const meshes = new Map<string, THREE.InstancedMesh>();
+  for (const [typeId, arr] of instancesByType) {
+    const built = await blockFactory.createInstancedBlock(typeId, arr, { showCollisionOutlines: render.showCollisionOutlines });
+    meshes.set(typeId, built.mesh);
+  }
+  return { meshes };
 }

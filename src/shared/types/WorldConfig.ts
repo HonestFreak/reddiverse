@@ -55,6 +55,15 @@ export function getTerrainParamsForPreset(terrainType: TerrainType, seed: number
     offsetZ: 0,
     useRidged: false,
     useErosionCurve: true,
+    seaLevel: 9,
+    continentalnessScale: 512,
+    erosionScale: 256,
+    peaksScale: 192,
+    temperatureScale: 1024,
+    humidityScale: 1024,
+    caveScale: 96,
+    caveDetailScale: 32,
+    caveThreshold: 0.1,
   };
 
   switch (terrainType) {
@@ -70,19 +79,37 @@ export function getTerrainParamsForPreset(terrainType: TerrainType, seed: number
         offsetZ: 0,
         useRidged: false,
         useErosionCurve: false,
+        seaLevel: 5,
+        continentalnessScale: 600,
+        erosionScale: 300,
+        peaksScale: 220,
+        temperatureScale: 800,
+        humidityScale: 900,
+        caveScale: 110,
+        caveDetailScale: 36,
+        caveThreshold: 0.12,
       };
       case 'mountains':
         return {
           seed,
-          scale: 120,              // Larger scale → broader mountain ranges, not too noisy
-          heightScale: 40,        // Higher peaks than greenery (try 40–80 range)
-          octaves: 5,             // More detail across scales
-          persistence: 0.45,      // How much each octave contributes (lower = less smooth)
-          lacunarity: 2.0,        // Frequency growth per octave (higher = jaggier)
-          offsetX: base.offsetX,  // Keep world offset consistent
+          scale: 120,
+          heightScale: 40,
+          octaves: 5,
+          persistence: 0.45,
+          lacunarity: 2.0,
+          offsetX: base.offsetX,
           offsetZ: base.offsetZ,
-          useRidged: true,        // Ridged noise is great for sharp mountain ridges
-          useErosionCurve: true,  // Adds natural slope/erosion feel
+          useRidged: true,
+          useErosionCurve: true,
+          seaLevel: 12,
+          continentalnessScale: 700,
+          erosionScale: 300,
+          peaksScale: 180,
+          temperatureScale: 1200,
+          humidityScale: 1000,
+          caveScale: 90,
+          caveDetailScale: 28,
+          caveThreshold: 0.08,
         };
     case 'greenery':
     default:

@@ -97,3 +97,73 @@ export class Perlin2D {
 }
 
 
+// Seeded Perlin noise (3D)
+export class Perlin3D {
+  private perm: Uint8Array;
+
+  constructor(seed: number) {
+    this.perm = Perlin3D.buildPermutation(seed);
+  }
+
+  static buildPermutation(seed: number): Uint8Array {
+    const rand = new SeededRandom(seed);
+    const p: number[] = new Array(256).fill(0).map((_, i) => i);
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(rand.next() * (i + 1));
+      const tmp = p[i]; p[i] = p[j]; p[j] = tmp;
+    }
+    const perm = new Uint8Array(512);
+    for (let i = 0; i < 512; i++) perm[i] = p[i & 255]!;
+    return perm;
+  }
+
+  private static fade(t: number): number {
+    return t * t * t * (t * (t * 6 - 15) + 10);
+  }
+
+  private static lerp(a: number, b: number, t: number): number {
+    return a + t * (b - a);
+  }
+
+  private static grad(hash: number, x: number, y: number, z: number): number {
+    const h = hash & 15;
+    const u = h < 8 ? x : y;
+    const v = h < 4 ? y : h === 12 || h === 14 ? x : z;
+    return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+  }
+
+  noise3D(x: number, y: number, z: number): number {
+    const X = Math.floor(x) & 255; const Y = Math.floor(y) & 255; const Z = Math.floor(z) & 255;
+    const xf = x - Math.floor(x); const yf = y - Math.floor(y); const zf = z - Math.floor(z);
+    const u = Perlin3D.fade(xf); const v = Perlin3D.fade(yf); const w = Perlin3D.fade(zf);
+    const A = this.perm[X] + Y; const AA = this.perm[A] + Z; const AB = this.perm[A + 1] + Z;
+    const B = this.perm[X + 1] + Y; const BA = this.perm[B] + Z; const BB = this.perm[B + 1] + Z;
+
+    const x1 = Perlin3D.lerp(
+      Perlin3D.grad(this.perm[AA], xf, yf, zf),
+      Perlin3D.grad(this.perm[BA], xf - 1, yf, zf),
+      u
+    );
+    const x2 = Perlin3D.lerp(
+      Perlin3D.grad(this.perm[AB], xf, yf - 1, zf),
+      Perlin3D.grad(this.perm[BB], xf - 1, yf - 1, zf),
+      u
+    );
+    const y1 = Perlin3D.lerp(x1, x2, v);
+
+    const x3 = Perlin3D.lerp(
+      Perlin3D.grad(this.perm[AA + 1], xf, yf, zf - 1),
+      Perlin3D.grad(this.perm[BA + 1], xf - 1, yf, zf - 1),
+      u
+    );
+    const x4 = Perlin3D.lerp(
+      Perlin3D.grad(this.perm[AB + 1], xf, yf - 1, zf - 1),
+      Perlin3D.grad(this.perm[BB + 1], xf - 1, yf - 1, zf - 1),
+      u
+    );
+    const y2 = Perlin3D.lerp(x3, x4, v);
+    return Perlin3D.lerp(y1, y2, w); // [-1, 1]
+  }
+}
+
+

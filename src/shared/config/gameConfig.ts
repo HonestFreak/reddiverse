@@ -9,12 +9,24 @@ export type TerrainConfig = {
   offsetZ: number; // global offset for z
   useRidged: boolean; // if true, combine abs noise for ridged look
   useErosionCurve: boolean; // if true, curve heights for more plains
+  // 3D terrain extras (optional; defaults applied if missing)
+  seaLevel?: number; // global sea level in blocks
+  // Multi-noise scales controlling macro features (in world units)
+  continentalnessScale?: number; // controls land vs ocean
+  erosionScale?: number; // controls river basins/erosion
+  peaksScale?: number; // controls mountain ridges
+  temperatureScale?: number; // biome temperature bands
+  humidityScale?: number; // biome humidity bands
+  caveScale?: number; // primary cave noise scale (bigger = larger caverns)
+  caveDetailScale?: number; // secondary cave detail
+  caveThreshold?: number; // [-1..1] threshold; lower -> more caves
 };
 
 export type ChunkConfig = {
   sizeX: number; // blocks in X
   sizeZ: number; // blocks in Z
   blockSize: number; // world units per block (usually 1)
+  sizeY?: number; // blocks in Y (vertical). If undefined, defaults to terrain.heightScale + 16 buffer
 };
 
 export type RenderConfig = {
@@ -53,11 +65,21 @@ export const defaultGameConfig: GameConfig = {
     offsetZ: 0,
     useRidged: false,
     useErosionCurve: true,
+    seaLevel: 9,
+    continentalnessScale: 512,
+    erosionScale: 256,
+    peaksScale: 192,
+    temperatureScale: 1024,
+    humidityScale: 1024,
+    caveScale: 96,
+    caveDetailScale: 32,
+    caveThreshold: 0.1,
   },
   chunk: {
     sizeX: 64,
     sizeZ: 64,
     blockSize: 1,
+    sizeY: 96,
   },
   render: {
     instanceColorSaturation: 0.6,
