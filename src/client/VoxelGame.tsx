@@ -28,6 +28,8 @@ import PlayerStatusMobile from './ui/panels/PlayerStatusMobile';
 import MobileControls from './ui/controls/MobileControls';
 import BuilderManagementModal from './ui/modals/BuilderManagementModal';
 import SmartBlockCreateModal from './ui/modals/SmartBlockCreateModal';
+import CreatorPanelDesktop from './ui/creator/CreatorPanelDesktop';
+import CreatorPanelMobile from './ui/creator/CreatorPanelMobile';
 
 function VoxelGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -474,7 +476,7 @@ function VoxelGame() {
     );
 
     function heightAt(x: number, z: number): number {
-      return terrain.heightAt(x, z);
+      return chunkManager.getSurfaceHeightAt(x, z);
     }
 
     const input = new InputManager();
@@ -621,9 +623,8 @@ function VoxelGame() {
           return true;
         }
       }
-      // Terrain occupancy: any cell at or below surface height
-      const h = heightAt(rx, rz);
-      if (ry <= h) return true;
+      // Terrain occupancy respecting removals
+      if (chunkManager.isTerrainSolidAtWorld(rx, ry, rz)) return true;
       // Foliage solid cells
       const fc = chunkManager.getFoliageCollisionCells();
       if (fc && fc.has(`${rx},${ry},${rz}`)) return true;
@@ -638,9 +639,8 @@ function VoxelGame() {
           return m.userData.blockType !== 'water';
         }
       }
-      // Terrain is solid
-      const h = heightAt(rx, rz);
-      if (ry <= h) return true;
+      // Terrain solidity respecting removals
+      if (chunkManager.isTerrainSolidAtWorld(rx, ry, rz)) return true;
       // Foliage cells are solid
       const fc = chunkManager.getFoliageCollisionCells();
       if (fc && fc.has(`${rx},${ry},${rz}`)) return true;
@@ -674,7 +674,7 @@ function VoxelGame() {
     // Smart blocks will be registered dynamically below
 
     async function handleBlockInteraction(event: MouseEvent | TouchEvent) {
-      addDebugLog(`Click detected - isPostCreator: ${isPostCreatorRef.current}`);
+      addDebugLog(`handleBlockInteraction: type=${(event as any).type}, button=${(event as any).button}, isCreator=${isPostCreatorRef.current}`);
       
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -703,16 +703,18 @@ function VoxelGame() {
       
       // Check intersection with existing placed blocks and terrain
       const intersects = raycaster.intersectObjects([...placedMeshes, ...allTerrainMeshes], false);
-      addDebugLog(`Found ${intersects.length} intersections`);
+      addDebugLog(`Raycast intersections: ${intersects.length}`);
       
       if (intersects.length > 0) {
         const intersected = intersects[0];
         if (intersected) {
           const block = intersected.object as THREE.Mesh | THREE.InstancedMesh;
           const isTerrain = allTerrainMeshes.includes(block as THREE.InstancedMesh);
+          addDebugLog(`Hit object: terrain=${isTerrain}, id=${(block as any).uuid ?? 'n/a'}`);
           
           if (event instanceof MouseEvent) {
-            if (event.button === 0) { // Left click - place block adjacent to face
+            const isRightClick = event.button === 2 || event.type === 'contextmenu';
+            if (!isRightClick) { // Left click - place block adjacent to face
               const face = intersected.face;
               if (face) {
                 const normal = face.normal.clone();
@@ -735,8 +737,35 @@ function VoxelGame() {
                 addDebugLog(`Placing block at ${Math.round(newPos.x)}, ${Math.round(newPos.y)}, ${Math.round(newPos.z)}`);
                 placeBlock(Math.round(newPos.x), Math.round(newPos.y), Math.round(newPos.z), selectedBlockTypeRef.current);
               }
-            } else if (event.button === 2) { // Right click - remove block
-              if (!isTerrain) {
+            } else { // Right click - remove block
+              if (!isPostCreatorRef.current) { addDebugLog('Blocked remove: not creator'); return; }
+              if (isTerrain) {
+                let ix: number, iz: number;
+                const inst = block as THREE.InstancedMesh;
+                const iid = (intersected as any).instanceId as number | undefined;
+                if (typeof iid === 'number' && iid >= 0) {
+                  const m = new THREE.Matrix4(); const wm = new THREE.Matrix4(); const p = new THREE.Vector3();
+                  inst.getMatrixAt(iid, m);
+                  wm.multiplyMatrices(inst.matrixWorld, m);
+                  p.setFromMatrixPosition(wm);
+                  ix = Math.round(p.x);
+                  iz = Math.round(p.z);
+                  const iy = Math.round(p.y);
+                  addDebugLog(`Using instance center for removal: iid=${iid}, world=(${ix}, ${iy}, ${iz})`);
+                  addDebugLog(`Removing terrain at ${ix}, ${iy}, ${iz}`);
+                  await chunkManager.removeTerrainBlockAtWorld(ix, iy, iz);
+                  addDebugLog('Terrain removal done');
+                  return;
+                } else {
+                  ix = Math.round(intersected.point.x);
+                  iz = Math.round(intersected.point.z);
+                  addDebugLog(`Fallback to hit point rounding: world=(${ix},${iz})`);
+                }
+                const iy = chunkManager.getSurfaceHeightAt(ix, iz);
+                addDebugLog(`Removing terrain at ${ix}, ${iy}, ${iz}`);
+                await chunkManager.removeTerrainBlockAtWorld(ix, iy, iz);
+                addDebugLog('Terrain removal done');
+              } else {
                 addDebugLog(`Removing block at ${block.position.x}, ${block.position.y}, ${block.position.z}`);
                 removeBlock(block.position.x, block.position.y, block.position.z);
               }
@@ -797,7 +826,7 @@ function VoxelGame() {
       const x = Math.round(camera.position.x);
       const z = Math.round(camera.position.z);
       const y = heightAt(x, z);
-      removeBlock(x, y, z);
+      void chunkManager.removeTerrainBlockAtWorld(x, y, z);
     };
 
     // Terrain geometry is provided by ChunkManager's instanced meshes; we only track placed blocks here
@@ -885,12 +914,17 @@ function VoxelGame() {
     }
 
     function onMouseDown(event: MouseEvent) {
+      addDebugLog(`onMouseDown: button=${event.button}`);
       if (event.button === 0) {
         isMouseDown = true;
         canvas.requestPointerLock();
         setIsPointerLocked(true);
+      } else if (event.button === 2) {
+        event.preventDefault();
+        addDebugLog('Right mouse down -> invoking handleBlockInteraction');
+        void handleBlockInteraction(event);
       }
-      // Don't prevent default - let click events work
+      // Don't prevent default - let click/contextmenu events work
     }
 
     function onMouseUp() {
@@ -1462,30 +1496,11 @@ function VoxelGame() {
       )}
 
       {!sceneError && !isMobile && canBuild && (
-        <CreatorPanelDesktop
-          visible={true}
-          isOwner={isOwner}
-          worldConfig={worldConfig}
-          allBlockTypes={allBlockTypes as any}
-          selectedBlockType={selectedBlockType}
-          onChangeBlockType={setSelectedBlockType}
-          onAdd={() => addBlockAtPlayerRef.current()}
-          onRemove={() => removeBlockAtPlayerRef.current()}
-          onOpenSmart={() => setShowSmartCreate(true)}
-          onOpenBuilderManagement={() => setShowBuilderManagement(true)}
-        />
+        <CreatorPanelDesktop />
       )}
 
       {!sceneError && isMobile && canBuild && (
-        <CreatorPanelMobile
-          visible={true}
-          allBlockTypes={allBlockTypes as any}
-          selectedBlockType={selectedBlockType}
-          onChangeBlockType={setSelectedBlockType}
-          onAdd={() => addBlockAtPlayerRef.current()}
-          onRemove={() => removeBlockAtPlayerRef.current()}
-          onOpenSmart={() => setShowSmartCreate(true)}
-        />
+        <CreatorPanelMobile />
       )}
       {showSmartCreate && !sceneError && (
         <SmartBlockCreateModal

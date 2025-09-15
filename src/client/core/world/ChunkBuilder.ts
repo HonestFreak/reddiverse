@@ -14,7 +14,8 @@ export async function buildSurfaceInstancedMesh(
   blockFactory: BlockFactory,
   blockTypeId: string = 'grass',
   isBlockRemoved?: (wx: number, wy: number, wz: number) => boolean,
-  chunkWorldPos?: { x: number; z: number }
+  chunkWorldPos?: { x: number; z: number },
+  getSurfaceHeightAtWorld?: (wx: number, wz: number) => number
 ): Promise<BuildResult> {
   const { sizeX, sizeZ, blockSize, heights } = chunk;
 
@@ -23,16 +24,24 @@ export async function buildSurfaceInstancedMesh(
   
   for (let z = 0; z < sizeZ; z++) {
     for (let x = 0; x < sizeX; x++) {
-      const h = heights[indexOf(x, z, sizeX)] ?? 0;
+      let h = heights[indexOf(x, z, sizeX)] ?? 0;
       
-      // Calculate world position if chunk world position is provided
-      if (isBlockRemoved && chunkWorldPos) {
+      // Use authoritative surface height if provided (accounts for multiple dig events)
+      if (getSurfaceHeightAtWorld && chunkWorldPos) {
         const wx = chunkWorldPos.x + x - Math.floor(sizeX / 2);
-        const wy = h;
         const wz = chunkWorldPos.z + z - Math.floor(sizeZ / 2);
-        
-        // Skip this block if it's been removed
-        if (isBlockRemoved(wx, wy, wz)) {
+        h = getSurfaceHeightAtWorld(wx, wz);
+        if (h <= 0) {
+          continue;
+        }
+      } else if (isBlockRemoved && chunkWorldPos) {
+        // Fallback: step down while removed
+        const wx = chunkWorldPos.x + x - Math.floor(sizeX / 2);
+        const wz = chunkWorldPos.z + z - Math.floor(sizeZ / 2);
+        while (h > 0 && isBlockRemoved(wx, h, wz)) {
+          h -= 1;
+        }
+        if (h <= 0 && isBlockRemoved(wx, h, wz)) {
           continue;
         }
       }
@@ -66,14 +75,21 @@ export async function buildSnowOverlayInstancedMesh(
   blockFactory: BlockFactory,
   snowBlockTypeId: string,
   thresholdHeight: number,
-  snowDepth: number
+  snowDepth: number,
+  getSurfaceHeightAtWorld?: (wx: number, wz: number) => number,
+  chunkWorldPos?: { x: number; z: number }
 ): Promise<BuildResult | null> {
   const { sizeX, sizeZ, blockSize, heights } = chunk;
 
   const instances: Array<{ position: THREE.Vector3; matrix: THREE.Matrix4 }> = [];
   for (let z = 0; z < sizeZ; z++) {
     for (let x = 0; x < sizeX; x++) {
-      const h = heights[indexOf(x, z, sizeX)] ?? 0;
+      let h = heights[indexOf(x, z, sizeX)] ?? 0;
+      if (getSurfaceHeightAtWorld && chunkWorldPos) {
+        const wx = chunkWorldPos.x + x - Math.floor(sizeX / 2);
+        const wz = chunkWorldPos.z + z - Math.floor(sizeZ / 2);
+        h = getSurfaceHeightAtWorld(wx, wz);
+      }
       if (h > thresholdHeight) {
         // Top snow layer position(s). We keep it simple: place a snow block at the top and (snowDepth-1) blocks below if desired
         for (let d = 0; d < snowDepth; d++) {
@@ -100,14 +116,21 @@ export async function buildWaterOverlayInstancedMesh(
   chunk: ChunkData,
   render: RenderConfig,
   blockFactory: BlockFactory,
-  seaLevel: number
+  seaLevel: number,
+  getSurfaceHeightAtWorld?: (wx: number, wz: number) => number,
+  chunkWorldPos?: { x: number; z: number }
 ): Promise<BuildResult | null> {
   const { sizeX, sizeZ, blockSize, heights } = chunk;
 
   const instances: Array<{ position: THREE.Vector3; matrix: THREE.Matrix4 }> = [];
   for (let z = 0; z < sizeZ; z++) {
     for (let x = 0; x < sizeX; x++) {
-      const h = heights[indexOf(x, z, sizeX)] ?? 0;
+      let h = heights[indexOf(x, z, sizeX)] ?? 0;
+      if (getSurfaceHeightAtWorld && chunkWorldPos) {
+        const wx = chunkWorldPos.x + x - Math.floor(sizeX / 2);
+        const wz = chunkWorldPos.z + z - Math.floor(sizeZ / 2);
+        h = getSurfaceHeightAtWorld(wx, wz);
+      }
       // If terrain height is below sea level, fill vertical water column from just above ground up to sea level
       if (h < seaLevel) {
         const startY = Math.max(1, h + 1);

@@ -17,6 +17,8 @@ export class ChunkManager {
   private foliageNoise: Perlin2D;
   private readonly foliageDensityScale = 256; // higher => larger clusters
   private foliageCellsGlobal: Set<string> = new Set();
+  // Tracks terrain cells (world coords) that have been removed by players
+  private removedTerrainCells: Set<string> = new Set();
 
   private chunks: Map<ChunkKey, { data: ChunkData; mesh: THREE.InstancedMesh; outline?: THREE.LineSegments | undefined; snowMesh?: THREE.InstancedMesh | undefined; foliageMeshes?: THREE.InstancedMesh[] | undefined; foliageCells?: Set<string> | undefined }>; 
   private snowOverlay: { threshold: number; depth: number; blockId: string } | undefined;
@@ -58,11 +60,15 @@ export class ChunkManager {
     }
 
     const data: ChunkData = { sizeX, sizeZ, blockSize, heights };
+    // Build the surface mesh, skipping any cells that have been removed
     const { mesh, outline } = await buildSurfaceInstancedMesh(
       data,
       this.renderConfig,
       this.blockFactory,
-      this.surfaceBlockId
+      this.surfaceBlockId,
+      (wx: number, wy: number, wz: number) => this.removedTerrainCells.has(`${Math.round(wx)},${Math.round(wy)},${Math.round(wz)}`),
+      { x: cx * sizeX, z: cz * sizeZ },
+      (wx: number, wz: number) => this.getSurfaceHeightAt(wx, wz)
     );
     mesh.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
     this.scene.add(mesh);
@@ -201,7 +207,9 @@ export class ChunkManager {
         this.blockFactory,
         this.snowOverlay.blockId,
         this.snowOverlay.threshold,
-        this.snowOverlay.depth
+        this.snowOverlay.depth,
+        (wx: number, wz: number) => this.getSurfaceHeightAt(wx, wz),
+        { x: cx * sizeX, z: cz * sizeZ }
       );
       if (overlay) {
         overlay.mesh.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
@@ -224,7 +232,9 @@ export class ChunkManager {
           data,
           this.renderConfig,
           this.blockFactory,
-          seaLevel
+          seaLevel,
+          (wx: number, wz: number) => this.getSurfaceHeightAt(wx, wz),
+          { x: cx * sizeX, z: cz * sizeZ }
         );
         if (waterOverlay) {
           waterOverlay.mesh.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
@@ -264,6 +274,158 @@ export class ChunkManager {
     }
     for (const wm of this.waterMeshes.values()) result.push(wm);
     return result;
+  }
+
+  // Compute which chunk contains a world (x,z) coordinate
+  private worldToChunk(wx: number, wz: number): { cx: number; cz: number } {
+    const { sizeX, sizeZ } = this.chunkConfig;
+    // Our chunks are positioned so that their local coordinates range from [-half, +half-1]
+    // with world origin at the center of chunk (0,0). Convert world to chunk indices accordingly.
+    const cx = Math.floor((Math.round(wx) + Math.floor(sizeX / 2)) / sizeX);
+    const cz = Math.floor((Math.round(wz) + Math.floor(sizeZ / 2)) / sizeZ);
+    return { cx, cz };
+  }
+
+  private async rebuildSurfaceMesh(cx: number, cz: number): Promise<void> {
+    const key = chunkKey(cx, cz);
+    const existing = this.chunks.get(key);
+    if (!existing) return;
+    // Remove old surface mesh and outline
+    const oldSurface = existing.mesh;
+    this.scene.remove(oldSurface);
+    if (existing.outline) this.scene.remove(existing.outline);
+    // Also remove and rebuild overlays that depend on surface height
+    if (existing.snowMesh) { this.scene.remove(existing.snowMesh); existing.snowMesh = undefined; }
+    const existingWater = this.waterMeshes.get(key);
+    if (existingWater) { this.scene.remove(existingWater); this.waterMeshes.delete(key); }
+    // Rebuild only the surface mesh using existing data, honoring removals
+    const { data } = existing;
+    const { sizeX, sizeZ, blockSize } = this.chunkConfig;
+    const built = await buildSurfaceInstancedMesh(
+      data,
+      this.renderConfig,
+      this.blockFactory,
+      this.surfaceBlockId,
+      (wx: number, wy: number, wz: number) => this.removedTerrainCells.has(`${Math.round(wx)},${Math.round(wy)},${Math.round(wz)}`),
+      { x: cx * sizeX, z: cz * sizeZ },
+      (wx: number, wz: number) => this.getSurfaceHeightAt(wx, wz)
+    );
+    built.mesh.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
+    this.scene.add(built.mesh);
+    // eslint-disable-next-line no-console
+    try {
+      const oldCount = ((oldSurface as any).count as number) ?? ((oldSurface.instanceMatrix?.array?.length ?? 0) / 16);
+      const newCount = ((built.mesh as any).count as number) ?? ((built.mesh.instanceMatrix?.array?.length ?? 0) / 16);
+      console.log(`[ChunkManager] surface instances: ${oldCount} -> ${newCount} for chunk ${cx},${cz}`);
+    } catch {}
+    if (built.outline) {
+      built.outline.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
+      this.scene.add(built.outline);
+    }
+    // Rebuild snow overlay if configured
+    let snowMesh: THREE.InstancedMesh | undefined = undefined;
+    if (this.snowOverlay) {
+      const overlay = await buildSnowOverlayInstancedMesh(
+        data,
+        this.renderConfig,
+        this.blockFactory,
+        this.snowOverlay.blockId,
+        this.snowOverlay.threshold,
+        this.snowOverlay.depth,
+        (wx: number, wz: number) => this.getSurfaceHeightAt(wx, wz),
+        { x: cx * sizeX, z: cz * sizeZ }
+      );
+      if (overlay) {
+        overlay.mesh.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
+        this.scene.add(overlay.mesh);
+        snowMesh = overlay.mesh;
+        if (overlay.outline) {
+          overlay.outline.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
+          this.scene.add(overlay.outline);
+        }
+      }
+    }
+
+    // Rebuild water overlay for greenery
+    if (this.surfaceBlockId === 'grass') {
+      const seaLevel = 9;
+      const waterOverlay = await buildWaterOverlayInstancedMesh(
+        data,
+        this.renderConfig,
+        this.blockFactory,
+        seaLevel,
+        (wx: number, wz: number) => this.getSurfaceHeightAt(wx, wz),
+        { x: cx * sizeX, z: cz * sizeZ }
+      );
+      if (waterOverlay) {
+        waterOverlay.mesh.position.set(cx * sizeX * blockSize, 0, cz * sizeZ * blockSize);
+        this.scene.add(waterOverlay.mesh);
+        this.waterMeshes.set(key, waterOverlay.mesh);
+      }
+    }
+
+    // Update chunk entry preserving foliage
+    this.chunks.set(key, { ...existing, mesh: built.mesh, outline: built.outline, snowMesh });
+  }
+
+  // Mark a terrain cell as removed and rebuild the containing chunk surface mesh
+  async removeTerrainBlockAtWorld(wx: number, wy: number, wz: number): Promise<void> {
+    const rx = Math.round(wx), ry = Math.round(wy), rz = Math.round(wz);
+    // Debug logging
+    // eslint-disable-next-line no-console
+    console.log(`[ChunkManager] removeTerrainBlockAtWorld: request at ${rx},${ry},${rz}`);
+    const beforeH = this.getSurfaceHeightAt(rx, rz);
+    this.removedTerrainCells.add(`${rx},${ry},${rz}`);
+    const afterH = this.getSurfaceHeightAt(rx, rz);
+    // eslint-disable-next-line no-console
+    console.log(`[ChunkManager] column (${rx},${rz}) height: ${beforeH} -> ${afterH} (removed y=${ry}, removed?=${this.removedTerrainCells.has(`${rx},${ry},${rz}`)})`);
+    const { cx, cz } = this.worldToChunk(rx, rz);
+    // eslint-disable-next-line no-console
+    console.log(`[ChunkManager] rebuilding chunk ${cx},${cz} after removal`);
+    await this.ensureChunk(cx, cz);
+    await this.rebuildSurfaceMesh(cx, cz);
+    // Also rebuild immediate neighbor chunks if the removed cell is on the chunk border to update adjacent faces visually
+    const { sizeX, sizeZ } = this.chunkConfig;
+    const halfX = Math.floor(sizeX / 2);
+    const halfZ = Math.floor(sizeZ / 2);
+    const localX = rx - cx * sizeX;
+    const localZ = rz - cz * sizeZ;
+    const atMinX = localX === -halfX;
+    const atMaxX = localX === sizeX - halfX - 1;
+    const atMinZ = localZ === -halfZ;
+    const atMaxZ = localZ === sizeZ - halfZ - 1;
+    const neighborCoords: Array<{ nx: number; nz: number }> = [];
+    if (atMinX) neighborCoords.push({ nx: cx - 1, nz: cz });
+    if (atMaxX) neighborCoords.push({ nx: cx + 1, nz: cz });
+    if (atMinZ) neighborCoords.push({ nx: cx, nz: cz - 1 });
+    if (atMaxZ) neighborCoords.push({ nx: cx, nz: cz + 1 });
+    for (const n of neighborCoords) {
+      await this.ensureChunk(n.nx, n.nz);
+      await this.rebuildSurfaceMesh(n.nx, n.nz);
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[ChunkManager] chunk ${cx},${cz} rebuilt`);
+  }
+
+  // Returns whether the terrain is solid at a given world cell, accounting for removals
+  isTerrainSolidAtWorld(wx: number, wy: number, wz: number): boolean {
+    const rx = Math.round(wx), ry = Math.round(wy), rz = Math.round(wz);
+    // If this exact cell was removed, it's not solid
+    if (this.removedTerrainCells.has(`${rx},${ry},${rz}`)) return false;
+    const base = this.terrain.heightAt(rx, rz);
+    return ry <= base;
+  }
+
+  // Returns the current surface height (topmost solid y) after removals for a column
+  getSurfaceHeightAt(wx: number, wz: number): number {
+    const rx = Math.round(wx), rz = Math.round(wz);
+    let h = this.terrain.heightAt(rx, rz);
+    // If top is removed, drop until a non-removed cell. If everything down to 0 is removed, return -1.
+    // If the top cell(s) were removed, step downward until a solid cell is found
+    while (h >= 0 && this.removedTerrainCells.has(`${rx},${h},${rz}`)) { h -= 1; }
+    // eslint-disable-next-line no-console
+    // console.log(`[ChunkManager] getSurfaceHeightAt(${rx},${rz}) => ${h}`);
+    return h;
   }
 }
 

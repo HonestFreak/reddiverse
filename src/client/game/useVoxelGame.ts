@@ -387,7 +387,7 @@ export function useVoxelGame(): VoxelGameHook {
       void chunkManager.ensureChunk(0, 0);
       const streamer = new ChunkStreamer(chunkManager, defaultGameConfig.chunk.sizeX, defaultGameConfig.chunk.sizeZ, 1);
 
-      function heightAt(x: number, z: number): number { return terrain.heightAt(x, z); }
+      function heightAt(x: number, z: number): number { return chunkManager.getSurfaceHeightAt(x, z); }
 
       const input = new InputManager();
       input.attach();
@@ -464,8 +464,7 @@ export function useVoxelGame(): VoxelGameHook {
         for (const m of placedMeshes) {
           if (Math.round(m.position.x) === rx && Math.round(m.position.y) === ry && Math.round(m.position.z) === rz) return true;
         }
-        const h = heightAt(rx, rz);
-        if (ry <= h) return true;
+        if (chunkManager.isTerrainSolidAtWorld(rx, ry, rz)) return true;
         const fc = chunkManager.getFoliageCollisionCells();
         if (fc && fc.has(`${rx},${ry},${rz}`)) return true;
         return false;
@@ -476,8 +475,7 @@ export function useVoxelGame(): VoxelGameHook {
         for (const m of placedMeshes) {
           if (Math.round(m.position.x) === rx && Math.round(m.position.y) === ry && Math.round(m.position.z) === rz) return (m as any).userData.blockType !== 'water';
         }
-        const h = heightAt(rx, rz);
-        if (ry <= h) return true;
+        if (chunkManager.isTerrainSolidAtWorld(rx, ry, rz)) return true;
         const fc = chunkManager.getFoliageCollisionCells();
         if (fc && fc.has(`${rx},${ry},${rz}`)) return true;
         return false;
@@ -507,6 +505,7 @@ export function useVoxelGame(): VoxelGameHook {
 
       async function handleBlockInteraction(event: MouseEvent | TouchEvent) {
         const canvas = canvasRef.current; if (!canvas) return;
+        addDebugLog(`handleBlockInteraction: type=${(event as any).type}, button=${(event as any).button}, isCreator=${isPostCreatorRef.current}`);
         let clientX: number, clientY: number;
         if (event instanceof MouseEvent) { clientX = event.clientX; clientY = event.clientY; }
         else { const touch = event.touches[0]; if (!touch) return; clientX = touch.clientX; clientY = touch.clientY; }
@@ -516,13 +515,16 @@ export function useVoxelGame(): VoxelGameHook {
         raycaster.setFromCamera(mouse, camera);
         const allTerrainMeshes = chunkManager.getAllTerrainMeshes();
         const intersects = raycaster.intersectObjects([...placedMeshes, ...allTerrainMeshes], false);
+        addDebugLog(`Raycast intersections: ${intersects.length}`);
         if (intersects.length > 0) {
           const intersected = intersects[0];
           if (!intersected) return;
           const block = intersected.object as THREE.Mesh | THREE.InstancedMesh;
           const isTerrain = allTerrainMeshes.includes(block as THREE.InstancedMesh);
+          addDebugLog(`Hit object: terrain=${isTerrain}, id=${(block as any).uuid ?? 'n/a'}`);
           if (event instanceof MouseEvent) {
-            if (event.button === 0) {
+            const isRightClick = event.button === 2 || event.type === 'contextmenu';
+            if (!isRightClick) {
               const face = intersected && intersected.face; if (face) {
                 const normal = face.normal.clone(); normal.transformDirection((block as any).matrixWorld);
                 let base: THREE.Vector3; let offsetScalar = 1.0;
@@ -531,8 +533,37 @@ export function useVoxelGame(): VoxelGameHook {
                 const newPos = base.add(normal.multiplyScalar(offsetScalar));
                 void placeBlock(Math.round(newPos.x), Math.round(newPos.y), Math.round(newPos.z), selectedBlockTypeRef.current);
               }
-            } else if (event.button === 2) {
-              if (!isTerrain) { removeBlock((block as any).position.x, (block as any).position.y, (block as any).position.z); }
+            } else {
+              if (!isPostCreatorRef.current) { addDebugLog('Blocked remove: not creator'); return; }
+              if (isTerrain) {
+                let ix: number, iz: number;
+                const inst = block as THREE.InstancedMesh;
+                const iid = (intersected as any).instanceId as number | undefined;
+                if (typeof iid === 'number' && iid >= 0) {
+                  const m = new THREE.Matrix4(); const wm = new THREE.Matrix4(); const p = new THREE.Vector3();
+                  inst.getMatrixAt(iid, m);
+                  wm.multiplyMatrices(inst.matrixWorld, m);
+                  p.setFromMatrixPosition(wm);
+                  ix = Math.round(p.x);
+                  iz = Math.round(p.z);
+                  const iy = Math.round(p.y);
+                  addDebugLog(`Using instance center for removal: iid=${iid}, world=(${ix},${iy},${iz})`);
+                  addDebugLog(`Removing terrain at ${ix},${iy},${iz}`);
+                  await chunkManager.removeTerrainBlockAtWorld(ix, iy, iz);
+                  addDebugLog('Terrain removal done');
+                  return;
+                } else {
+                  ix = Math.round(intersected.point.x);
+                  iz = Math.round(intersected.point.z);
+                  addDebugLog(`Fallback to hit point rounding: world=(${ix},${iz})`);
+                }
+                const iy = chunkManager.getSurfaceHeightAt(ix, iz);
+                addDebugLog(`Removing terrain at ${ix},${iy},${iz}`);
+                await chunkManager.removeTerrainBlockAtWorld(ix, iy, iz);
+                addDebugLog('Terrain removal done');
+              } else {
+                removeBlock((block as any).position.x, (block as any).position.y, (block as any).position.z);
+              }
             }
           } else {
             const face = intersected && intersected.face; if (face) {
@@ -569,7 +600,7 @@ export function useVoxelGame(): VoxelGameHook {
         const x = Math.round(camera.position.x);
         const z = Math.round(camera.position.z);
         const y = heightAt(x, z);
-        removeBlock(x, y, z);
+        void chunkManager.removeTerrainBlockAtWorld(x, y, z);
       };
 
       const testGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -622,7 +653,10 @@ export function useVoxelGame(): VoxelGameHook {
         yaw -= movementX * 0.0025; pitch -= movementY * 0.0025; const maxPitch = Math.PI / 3;
         if (pitch > maxPitch) pitch = maxPitch; if (pitch < -maxPitch) pitch = -maxPitch;
       }
-      function onMouseDown(event: MouseEvent) { if (event.button === 0) { isMouseDown = true; canvas.requestPointerLock(); setIsPointerLocked(true); } }
+      function onMouseDown(event: MouseEvent) {
+        if (event.button === 0) { isMouseDown = true; canvas.requestPointerLock(); setIsPointerLocked(true); }
+        else if (event.button === 2) { event.preventDefault(); void handleBlockInteraction(event); }
+      }
       function onMouseUp() { isMouseDown = false; }
 
       function onTouchStart(event: TouchEvent) {

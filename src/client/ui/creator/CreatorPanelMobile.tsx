@@ -1,4 +1,5 @@
 // Deprecated by BlockHotbar and BlockPaletteModal
-export default function CreatorPanelMobile() { return null; }
+// Accept any props to satisfy legacy call sites
+export default function CreatorPanelMobile(_props: any) { return null; }
 
 

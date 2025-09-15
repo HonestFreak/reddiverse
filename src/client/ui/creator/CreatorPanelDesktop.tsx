@@ -1,4 +1,5 @@
 // Deprecated by BlockHotbar and BlockPaletteModal
-export default function CreatorPanelDesktop() { return null; }
+// Accept any props to satisfy legacy call sites
+export default function CreatorPanelDesktop(_props: any) { return null; }
 
 
