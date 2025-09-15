@@ -64,6 +64,7 @@ export function getTerrainParamsForPreset(terrainType: TerrainType, seed: number
     caveScale: 96,
     caveDetailScale: 32,
     caveThreshold: 0.1,
+    biomePreset: terrainType,
   };
 
   switch (terrainType) {
@@ -88,6 +89,7 @@ export function getTerrainParamsForPreset(terrainType: TerrainType, seed: number
         caveScale: 110,
         caveDetailScale: 36,
         caveThreshold: 0.12,
+        biomePreset: 'desert',
       };
       case 'mountains':
         return {
@@ -110,10 +112,11 @@ export function getTerrainParamsForPreset(terrainType: TerrainType, seed: number
           caveScale: 90,
           caveDetailScale: 28,
           caveThreshold: 0.08,
+          biomePreset: 'mountains',
         };
     case 'greenery':
     default:
-      return { seed, ...base };
+      return { seed, ...base, biomePreset: 'greenery' };
   }
 }
 

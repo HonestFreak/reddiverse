@@ -134,6 +134,11 @@ export class TerrainGenerator {
         if (temp01 > 0.65 && humid01 < 0.35 && cont01 > 0.45) biome = 'desert';
         else if (isMountain && temp01 < 0.45) biome = 'snow';
         else if (isMountain) biome = 'mountain';
+        // Apply hard preset override when provided via world config
+        const preset = (cfg as any).biomePreset as ('greenery' | 'desert' | 'mountains' | undefined);
+        if (preset === 'desert') biome = 'desert';
+        else if (preset === 'greenery') biome = 'greenery';
+        else if (preset === 'mountains') biome = (groundH > seaLevel + 10) ? 'snow' : 'mountain';
 
         // Column fill
         let topSolid = -1;
@@ -212,6 +217,10 @@ export class TerrainGenerator {
     if (temp01 > 0.65 && humid01 < 0.35 && cont01 > 0.45) biome = 'desert';
     else if (mountain > 0.25 && temp01 < 0.45) biome = 'snow';
     else if (mountain > 0.25) biome = 'mountain';
+    const preset = (cfg as any).biomePreset as ('greenery' | 'desert' | 'mountains' | undefined);
+    if (preset === 'desert') biome = 'desert';
+    else if (preset === 'greenery') biome = 'greenery';
+    else if (preset === 'mountains') biome = (this.heightAt(x, z) > (cfg.seaLevel ?? Math.floor(cfg.heightScale * 0.5)) + 10) ? 'snow' : 'mountain';
     return { cont01, ero01, pk01, temp01, humid01, mountain, biome };
   }
 

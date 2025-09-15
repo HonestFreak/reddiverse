@@ -20,6 +20,8 @@ export type TerrainConfig = {
   caveScale?: number; // primary cave noise scale (bigger = larger caverns)
   caveDetailScale?: number; // secondary cave detail
   caveThreshold?: number; // [-1..1] threshold; lower -> more caves
+  // Optional world preset to bias/override biome selection
+  biomePreset?: 'greenery' | 'desert' | 'mountains';
 };
 
 export type ChunkConfig = {

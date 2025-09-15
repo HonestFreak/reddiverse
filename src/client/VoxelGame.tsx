@@ -11,7 +11,7 @@ import { ThirdPersonController } from './core/player/ThirdPersonController';
 import { BlockFactory } from './core/blocks/BlockFactory';
 import { defaultBlockTypes, type BlockTypeRegistry } from '../shared/types/BlockTypes';
 import type { SmartBlocksResponse, SmartBlockDefinition } from '../shared/types/SmartBlocks';
-import { getTerrainParamsForPreset, presetSurfaceBlockId } from '../shared/types/WorldConfig';
+import { getTerrainParamsForPreset } from '../shared/types/WorldConfig';
 import { SpecialBlocksManager } from './core/blocks/special/SpecialBlocksManager';
 import { LightBlock } from './core/blocks/special/LightBlock';
 import { JumperBlock } from './core/blocks/special/JumperBlock';
@@ -440,7 +440,6 @@ function VoxelGame() {
     );
     // Procedural terrain (Perlin fBm) via ChunkManager using preset params
     const terrain = new TerrainGenerator(terrainParams);
-    const surfaceBlockId = presetSurfaceBlockId(worldConfig?.terrainType ?? 'greenery');
     // Snow only at the very top of mountains: dynamic threshold near max height
     const snowOverlayCfg = (worldConfig?.terrainType === 'mountains')
       ? {
@@ -458,7 +457,6 @@ function VoxelGame() {
       defaultGameConfig.chunk,
       defaultGameConfig.render,
       allBlockTypes,
-      surfaceBlockId,
       snowOverlayCfg
     );
     
