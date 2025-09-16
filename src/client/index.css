@@ -1,4 +1,21 @@
 @import "tailwindcss";
+@import url('https://fonts.cdnfonts.com/css/karmatic-arcade');
+
+/* Local game font (provided in public folder) */
+@font-face {
+  font-family: 'SpenbebGame';
+  src: url('/SpenbebGame.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Crackman';
+  src: url('/Crackman.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* Global resets */
 * {
@@ -19,4 +36,52 @@ body {
 #root {
   width: 100%;
   height: 100%;
+}
+
+/* Display font helpers (inspired by gaming fonts like Super Font, Good Game) */
+.font-bungee {
+  font-family: 'Bungee', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+.font-bungee-shade {
+  font-family: 'Bungee Shade', 'Bungee', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+.font-fredoka {
+  font-family: 'Fredoka', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+.font-karmatic {
+  font-family: 'Karmatic Arcade', 'KarmaticArcade', 'Bungee', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+.font-spenbeb {
+  font-family: 'SpenbebGame', 'Karmatic Arcade', 'Bungee', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+.font-crackman {
+  font-family: 'Crackman', 'SpenbebGame', 'Karmatic Arcade', 'Bungee', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Cute entry animations for the start card */
+@keyframes pop-in {
+  0% { opacity: 0; transform: translateY(10px) scale(0.98); }
+  60% { opacity: 1; transform: translateY(0) scale(1.015); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-pop {
+  animation: pop-in 500ms ease-out both;
+}
+
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-floaty {
+  animation: floaty 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
 }

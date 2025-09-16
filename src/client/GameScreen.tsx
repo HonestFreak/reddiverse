@@ -19,7 +19,10 @@ export default function GameScreen() {
   const {
     canvasRef,
     isPointerLocked,
+    hasStarted,
     isMobile,
+    worldLoaded,
+    startGame,
     mobileMoveState,
     mobileRotationState,
     joystickPosition,
@@ -65,7 +68,11 @@ export default function GameScreen() {
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       <ErrorOverlay message={sceneError} deviceLabel={isMobile ? 'mobile' : 'PC'} />
-      <StartOverlay visible={!isPointerLocked && !isMobile && !sceneError} />
+      <StartOverlay
+        visible={!hasStarted && !sceneError}
+        isLoading={!worldLoaded}
+        onStart={startGame}
+      />
       {!sceneError && (
         <>
           {/* Hide legacy overlays on desktop in favor of InfoDock */}

@@ -22,7 +22,9 @@ import { TimeManager } from '../core/sky/TimeManager';
 export type VoxelGameHook = {
   canvasRef: React.MutableRefObject<HTMLCanvasElement | null>;
   isPointerLocked: boolean;
+  hasStarted: boolean;
   isMobile: boolean;
+  worldLoaded: boolean;
   mobileMoveState: { forward: boolean; backward: boolean; left: boolean; right: boolean; sprint: boolean };
   mobileRotationState: { left: boolean; right: boolean };
   joystickPosition: { x: number; y: number };
@@ -62,6 +64,7 @@ export type VoxelGameHook = {
   removeBlockAtPlayerRef: React.MutableRefObject<() => void>;
   deathOverlayVisible: boolean;
   handleReplay: () => void;
+  startGame: () => void;
 };
 
 export function useVoxelGame(): VoxelGameHook {
@@ -70,7 +73,9 @@ export function useVoxelGame(): VoxelGameHook {
   // Temporary variable to hide player sphere and username for screenshots
   const HIDE_PLAYER_FOR_SCREENSHOTS = false;
   const [isPointerLocked, setIsPointerLocked] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [worldLoaded, setWorldLoaded] = useState(false);
   const [mobileMoveState, setMobileMoveState] = useState({
     forward: false,
     backward: false,
@@ -408,10 +413,18 @@ export function useVoxelGame(): VoxelGameHook {
       const spawnZ = 320;
       const spawnChunkX = Math.floor((spawnX + Math.floor(defaultGameConfig.chunk.sizeX / 2)) / defaultGameConfig.chunk.sizeX);
       const spawnChunkZ = Math.floor((spawnZ + Math.floor(defaultGameConfig.chunk.sizeZ / 2)) / defaultGameConfig.chunk.sizeZ);
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dz = -1; dz <= 1; dz++) {
-          void chunkManager.ensureChunk(spawnChunkX + dx, spawnChunkZ + dz);
+      try {
+        const preload: Promise<void>[] = [];
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dz = -1; dz <= 1; dz++) {
+            preload.push(chunkManager.ensureChunk(spawnChunkX + dx, spawnChunkZ + dz));
+          }
         }
+        await Promise.all(preload);
+      } catch (_) {
+        // best-effort
+      } finally {
+        setWorldLoaded(true);
       }
       const streamer = new ChunkStreamer(chunkManager, defaultGameConfig.chunk.sizeX, defaultGameConfig.chunk.sizeZ, 1);
 
@@ -956,6 +969,14 @@ export function useVoxelGame(): VoxelGameHook {
       await loadPlayerState();
       initRealtime();
 
+      // Sync isPointerLocked to real pointer lock state
+      const onPointerLockChange = () => {
+        const locked = document.pointerLockElement === canvas;
+        setIsPointerLocked(locked);
+        if (locked) setHasStarted(true);
+      };
+      document.addEventListener('pointerlockchange', onPointerLockChange);
+
       canvas.addEventListener('mousemove', onMouseMove);
       canvas.addEventListener('mousedown', onMouseDown);
       canvas.addEventListener('mouseup', onMouseUp);
@@ -979,6 +1000,7 @@ export function useVoxelGame(): VoxelGameHook {
         canvas.removeEventListener('touchend', onTouchEnd);
         document.removeEventListener('keydown', onKeyDown);
         document.removeEventListener('keyup', onKeyUp);
+        document.removeEventListener('pointerlockchange', onPointerLockChange);
         window.removeEventListener('resize', handleResize);
         if (posInterval) window.clearInterval(posInterval);
         if (presencePollInterval) window.clearInterval(presencePollInterval);
@@ -991,6 +1013,14 @@ export function useVoxelGame(): VoxelGameHook {
     };
     void run();
   }, []);
+
+  const startGame = () => {
+    setHasStarted(true);
+    const c = canvasRef.current;
+    if (c && c.requestPointerLock) {
+      try { c.requestPointerLock(); } catch (_) {}
+    }
+  };
 
   // Detect death and handle respawn + health reset
   useEffect(() => {
@@ -1016,6 +1046,7 @@ export function useVoxelGame(): VoxelGameHook {
   return {
     canvasRef,
     isPointerLocked,
+    hasStarted,
     isMobile,
     mobileMoveState,
     mobileRotationState,
@@ -1056,6 +1087,8 @@ export function useVoxelGame(): VoxelGameHook {
     removeBlockAtPlayerRef,
     deathOverlayVisible,
     handleReplay,
+    worldLoaded,
+    startGame,
   };
 }
 

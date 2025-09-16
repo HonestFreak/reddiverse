@@ -28,15 +28,15 @@ export const createPost = async (worldConfig?: WorldConfig, postTitle?: string, 
 
   return await reddit.submitCustomPost({
     splash: {
-      appDisplayName: worldName || 'myvoxel234',
+      appDisplayName: worldName || 'Reddiverse',
       backgroundUri: getBackgroundUri(worldConfig?.terrainType),
       buttonLabel: 'Explore',
       description: `Made by ${username}`,
-      heading: worldName || 'myvoxel234',
+      heading: worldName || 'Reddiverse',
       appIconUri: snooavatarUrl || undefined,
     },
     subredditName: subredditName,
-    title: postTitle || worldName || 'myvoxel234',
+    title: postTitle || worldName || 'Reddiverse',
     // Store initial world config in post data for traceability (primary store is Redis)
     postData: worldConfig ? { worldConfig } : {},
   });

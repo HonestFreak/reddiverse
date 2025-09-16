@@ -34,6 +34,8 @@ import CreatorPanelMobile from './ui/creator/CreatorPanelMobile';
 function VoxelGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [worldLoaded, setWorldLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMoveState, setMobileMoveState] = useState({
     forward: false,
@@ -465,7 +467,12 @@ function VoxelGame() {
     blockFactoryRef.current = blockFactory;
     
     // Generate central chunk; follow-ups can stream adjacent chunks
-    void chunkManager.ensureChunk(0, 0);
+    try {
+      await chunkManager.ensureChunk(0, 0);
+      setWorldLoaded(true);
+    } catch (_) {
+      setWorldLoaded(true);
+    }
     const streamer = new ChunkStreamer(
       chunkManager,
       defaultGameConfig.chunk.sizeX,
@@ -1412,6 +1419,14 @@ function VoxelGame() {
     initRealtime();
 
     // Event listeners
+    // Sync pointer lock state to UI and start flag
+    const onPointerLockChange = () => {
+      const locked = document.pointerLockElement === canvas;
+      setIsPointerLocked(locked);
+      if (locked) setHasStarted(true);
+    };
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+
     canvas.addEventListener('mousemove', onMouseMove);
     canvas.addEventListener('mousedown', onMouseDown);
     canvas.addEventListener('mouseup', onMouseUp);
@@ -1455,6 +1470,7 @@ function VoxelGame() {
       canvas.removeEventListener('touchend', onTouchEnd);
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
+      document.removeEventListener('pointerlockchange', onPointerLockChange);
       window.removeEventListener('resize', handleResize);
       if (posInterval) window.clearInterval(posInterval);
       if (presencePollInterval) window.clearInterval(presencePollInterval);
@@ -1472,7 +1488,17 @@ function VoxelGame() {
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       <ErrorOverlay message={sceneError} deviceLabel={isMobile ? 'mobile' : 'PC'} />
 
-      <StartOverlay visible={!isPointerLocked && !isMobile && !sceneError} />
+      <StartOverlay
+        visible={!hasStarted && !sceneError}
+        isLoading={!worldLoaded}
+        onStart={() => {
+          setHasStarted(true);
+          const c = canvasRef.current;
+          if (c && c.requestPointerLock) {
+            try { c.requestPointerLock(); } catch (_) {}
+          }
+        }}
+      />
 
       {!sceneError && (
         <WorldInfo worldConfig={worldConfig} isMobile={isMobile} canBuild={canBuild} />

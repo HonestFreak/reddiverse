@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "Reddiverse",
+  "name": "reddiversegame",
   "post": {
     "dir": "dist/client",
     "entrypoints": {
@@ -25,7 +25,6 @@
         "forUserType": "moderator",
         "endpoint": "/internal/menu/start-world-create"
       }
-      
     ]
   },
   "triggers": {
@@ -40,6 +39,6 @@
     "media": true
   },
   "dev": {
-    "subreddit": "myvoxel234_dev"
+    "subreddit": "reddiversegame_dev"
   }
 }
