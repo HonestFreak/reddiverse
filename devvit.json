@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "myvoxel234",
+  "name": "Reddiverse",
   "post": {
     "dir": "dist/client",
     "entrypoints": {
@@ -19,15 +19,8 @@
   "menu": {
     "items": [
       {
-        "label": "Create a new post",
-        "description": "myvoxel234",
-        "location": "subreddit",
-        "forUserType": "moderator",
-        "endpoint": "/internal/menu/post-create"
-      },
-      {
-        "label": "Create Voxel World",
-        "description": "Initialize world config (terrain + seed)",
+        "label": "Generate New Reddiverse",
+        "description": "Initialize world config (biome + seed)",
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/start-world-create"

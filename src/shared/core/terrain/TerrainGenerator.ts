@@ -48,7 +48,20 @@ export class TerrainGenerator {
   }
 
   private shapeCurve(t: number): number {
-    return 1 - (1 - t) * (1 - t);
+    // Biome-aware elevation shaping
+    // Mountains: smootherstep for smooth -> steep -> smooth profile
+    // Others: smoothstep to keep gentle lowlands (helps expose water)
+    const cfg: any = this.config as any;
+    const preset = cfg.biomePreset as ('greenery' | 'desert' | 'mountains' | undefined);
+    const clamped = Math.max(0, Math.min(1, t));
+    if (preset === 'mountains') {
+      // smootherstep: 6t^5 - 15t^4 + 10t^3
+      const a = clamped;
+      return a * a * a * (a * (6 * a - 15) + 10);
+    }
+    // smoothstep: 3t^2 - 2t^3
+    const a = clamped;
+    return a * a * (3 - 2 * a);
   }
 
   // Legacy-compatible surface height query based on multi-noise
@@ -56,7 +69,7 @@ export class TerrainGenerator {
     const cfg = this.config;
     const wx = x + cfg.offsetX;
     const wz = z + cfg.offsetZ;
-    const seaLevel = cfg.seaLevel ?? Math.floor(cfg.heightScale * 0.5);
+    // Sea level is used only in voxel fill; here we compute normalized height
     // Use world-unit scales directly for clear control
     const cont = this.fbm2D(this.continentalness, wx / (cfg.continentalnessScale || 512), wz / (cfg.continentalnessScale || 512), cfg.octaves, cfg.persistence, cfg.lacunarity, false);
     const ero = this.fbm2D(this.erosion, wx / (cfg.erosionScale || 256), wz / (cfg.erosionScale || 256), cfg.octaves, cfg.persistence, cfg.lacunarity, false);
@@ -76,10 +89,17 @@ export class TerrainGenerator {
     const mountain = Math.max(0, pk01 - 0.5) * (1.0 - ero01);
     // Local relief contribution
     const relief01 = (relief + 1) * 0.5;
-    let n = base * 0.5 + mountain * 0.6 + (relief01 - 0.5) * 0.6;
+    // Emphasize dramatic mountain steepness under mountains preset
+    const heightPreset = (this.config as any).biomePreset as ('greenery' | 'desert' | 'mountains' | undefined);
+    const baseWeight = heightPreset === 'mountains' ? 0.4 : 0.5;
+    const mountainWeight = heightPreset === 'mountains' ? 0.9 : 0.6;
+    const reliefWeight = heightPreset === 'mountains' ? 0.5 : 0.6;
+    let n = base * baseWeight + mountain * mountainWeight + (relief01 - 0.5) * reliefWeight;
     if (cfg.useErosionCurve) n = this.shapeCurve(n);
     n = Math.min(1, Math.max(0, n));
-    const h = Math.floor(seaLevel + n * Math.max(0, cfg.heightScale - seaLevel));
+    // Map normalized elevation directly into [0, heightScale]
+    // Sea level is a separate threshold; this allows ground < sea for lakes/ocean
+    const h = Math.floor(n * Math.max(0, cfg.heightScale));
     return Number.isFinite(h) ? h : 0;
   }
 
@@ -124,9 +144,15 @@ export class TerrainGenerator {
         const base = cont01;
         const mountain = Math.max(0, pk01 - 0.5) * (1.0 - ero01);
         const relief01 = (relief + 1) * 0.5;
-        let elevation = base * 0.5 + mountain * 0.6 + (relief01 - 0.5) * 0.6;
+        const biomePreset = (cfg as any).biomePreset as ('greenery' | 'desert' | 'mountains' | undefined);
+        const baseWeight = biomePreset === 'mountains' ? 0.4 : 0.5;
+        const mountainWeight = biomePreset === 'mountains' ? 0.9 : 0.6;
+        const reliefWeight = biomePreset === 'mountains' ? 0.5 : 0.6;
+        let elevation = base * baseWeight + mountain * mountainWeight + (relief01 - 0.5) * reliefWeight;
         if (cfg.useErosionCurve) elevation = this.shapeCurve(clamp01(elevation));
-        const groundH = Math.floor(seaLevel + elevation * Math.max(0, cfg.heightScale - seaLevel));
+        // Map normalized elevation directly into [0, heightScale]
+        // Sea level handled during fill to create visible water bodies
+        const groundH = Math.floor(clamp01(elevation) * Math.max(0, cfg.heightScale));
 
         // Biome selection
         let biome: 'desert' | 'mountain' | 'snow' | 'greenery' = 'greenery';
@@ -135,10 +161,10 @@ export class TerrainGenerator {
         else if (isMountain && temp01 < 0.45) biome = 'snow';
         else if (isMountain) biome = 'mountain';
         // Apply hard preset override when provided via world config
-        const preset = (cfg as any).biomePreset as ('greenery' | 'desert' | 'mountains' | undefined);
-        if (preset === 'desert') biome = 'desert';
-        else if (preset === 'greenery') biome = 'greenery';
-        else if (preset === 'mountains') biome = (groundH > seaLevel + 10) ? 'snow' : 'mountain';
+        const hardPreset = (cfg as any).biomePreset as ('greenery' | 'desert' | 'mountains' | undefined);
+        if (hardPreset === 'desert') biome = 'desert';
+        else if (hardPreset === 'greenery') biome = 'greenery';
+        else if (hardPreset === 'mountains') biome = (groundH > seaLevel + 10) ? 'snow' : 'mountain';
 
         // Column fill
         let topSolid = -1;

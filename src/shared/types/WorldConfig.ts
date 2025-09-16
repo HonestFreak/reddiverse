@@ -46,9 +46,9 @@ export function presetOverlay(terrainType: TerrainType): OverlayConfig | null {
 export function getTerrainParamsForPreset(terrainType: TerrainType, seed: number): TerrainConfig {
   // Common defaults
   const base: Omit<TerrainConfig, 'seed'> = {
-    scale: 48,
-    heightScale: 18,
-    octaves: 4,
+    scale: 120,
+    heightScale: 40,
+    octaves: 5,
     persistence: 0.5,
     lacunarity: 2.0,
     offsetX: 0,
@@ -80,7 +80,7 @@ export function getTerrainParamsForPreset(terrainType: TerrainType, seed: number
         offsetZ: 0,
         useRidged: false,
         useErosionCurve: false,
-        seaLevel: 5,
+        seaLevel: 2,
         continentalnessScale: 600,
         erosionScale: 300,
         peaksScale: 220,
@@ -94,19 +94,20 @@ export function getTerrainParamsForPreset(terrainType: TerrainType, seed: number
       case 'mountains':
         return {
           seed,
-          scale: 120,
-          heightScale: 40,
-          octaves: 5,
-          persistence: 0.45,
-          lacunarity: 2.0,
+          scale: 80,
+          heightScale: 64,
+          octaves: 6,
+          persistence: 0.38,
+          lacunarity: 2.25,
           offsetX: base.offsetX,
           offsetZ: base.offsetZ,
           useRidged: true,
-          useErosionCurve: true,
-          seaLevel: 12,
+          // Disable erosion curve; we shape with smootherstep in generator for S-profile
+          useErosionCurve: false,
+          seaLevel: 8,
           continentalnessScale: 700,
-          erosionScale: 300,
-          peaksScale: 180,
+          erosionScale: 260,
+          peaksScale: 170,
           temperatureScale: 1200,
           humidityScale: 1000,
           caveScale: 90,
@@ -116,7 +117,8 @@ export function getTerrainParamsForPreset(terrainType: TerrainType, seed: number
         };
     case 'greenery':
     default:
-      return { seed, ...base, biomePreset: 'greenery' };
+      // For greenery, keep erosion curve off to allow deeper basins; sea level from base is higher
+      return { seed, ...base, useErosionCurve: false, biomePreset: 'greenery' };
   }
 }
 

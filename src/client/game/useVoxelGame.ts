@@ -66,6 +66,9 @@ export type VoxelGameHook = {
 
 export function useVoxelGame(): VoxelGameHook {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Temporary variable to hide player sphere and username for screenshots
+  const HIDE_PLAYER_FOR_SCREENSHOTS = false;
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMoveState, setMobileMoveState] = useState({
@@ -768,6 +771,11 @@ export function useVoxelGame(): VoxelGameHook {
           const gz = Math.round(controller.playerBase.z);
           const groundY = heightAt(gx, gz) + 0.5; // Top surface of terrain blocks
           selfShadow.position.set(controller.playerBase.x, groundY + 0.01, controller.playerBase.z);
+          
+          // Keep shadow hidden for screenshots
+          if (HIDE_PLAYER_FOR_SCREENSHOTS) {
+            selfShadow.visible = false;
+          }
         }
         
         if (playerCollisionBox) { playerCollisionBox.position.copy(controller.playerBase); playerCollisionBox.position.y += 0.4; }
@@ -835,6 +843,12 @@ export function useVoxelGame(): VoxelGameHook {
             selfGroup.add(body); 
             selfGroup.add(label); 
             selfGroup.position.copy(controller.playerBase); 
+            
+            // Hide player sphere and username for screenshots
+            if (HIDE_PLAYER_FOR_SCREENSHOTS) {
+              selfGroup.visible = false;
+            }
+            
             scene.add(selfGroup); 
           }
           
@@ -849,6 +863,12 @@ export function useVoxelGame(): VoxelGameHook {
             });
             selfShadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
             selfShadow.rotation.x = -Math.PI / 2; // Rotate to lie flat on ground
+            
+            // Hide player shadow for screenshots
+            if (HIDE_PLAYER_FOR_SCREENSHOTS) {
+              selfShadow.visible = false;
+            }
+            
             scene.add(selfShadow);
           }
           await fetch('/api/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ position: getPlayerPosition() }) });
