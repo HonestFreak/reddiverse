@@ -28,37 +28,42 @@ export default function StartOverlay({ visible, isLoading = false, onStart }: St
               <PlainTitle text="Reddiverse" />
             </div>
 
-            <br/>
-
             {/* Status / CTA */}
             {isLoading ? (
-              <div className="flex items-center justify-center gap-3">
-                <div className="h-6 w-6 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" />
+              <div className="flex items-center justify-center gap-3" role="status" aria-live="polite" aria-busy="true">
+                <div className="h-6 w-6 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" aria-hidden />
                 <div className="text-emerald-900 font-fredoka text-[15px]">World is loading…</div>
               </div>
             ) : (
               <div className="w-full flex items-center justify-center">
-                <div
+                <button
+                  type="button"
                   onClick={onStart}
-                  className="rounded-2xl bg-emerald-500/95 px-[50px] py-4 text-white text-xl font-bungee shadow-xl shadow-emerald-500/30 hover:bg-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-300 active:scale-[0.98] transition"
+                  autoFocus
+                  aria-label={isTouch ? 'Tap to Continue' : 'Click to Continue'}
+                  className="rounded-2xl bg-emerald-500/95 text-white text-xl font-bungee shadow-xl shadow-emerald-500/30 hover:bg-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-300 active:scale-[0.98] transition px-10 py-3"
                 >
-                  <div className="flex items-center justify-center px-[50px]">                  {isTouch ? ' Tap to continue ' : ' Click to continue '}
-                  </div>
-                </div>
+                  {isTouch ? 'Tap to Continue' : 'Click to Continue'}
+                </button>
               </div>
             )}
 
-            <br/>
 
             {/* Controls */}
             <div className="grid grid-cols-1 gap-3 text-sm text-emerald-900">
-              <Row icon="🕹️" label={
+              {isTouch ? (
                 <>
-                  <Key>W</Key>/<Key>S</Key> to move • <Key>A</Key>/<Key>D</Key> to rotate
+                  <Row icon="🕹️" label={<>Use on-screen joystick to move • Drag to look</>} />
+                  <Row icon="🦘" label={<>Tap Jump to jump • Hold to sprint</>} />
+                  <Row icon="🧱" label={<>Use hotbar to change material</>} />
                 </>
-              } />
-              <Row icon="🦘" label={<><Key>Space</Key> to jump • <Key>Shift</Key> to sprint</>} />
-              <Row icon="🧱" label={<><Key>1</Key>-<Key>6</Key> to change material</>} />
+              ) : (
+                <>
+                  <Row icon="🕹️" label={<><Key>W</Key>/<Key>S</Key> to move • <Key>A</Key>/<Key>D</Key> to rotate</>} />
+                  <Row icon="🦘" label={<><Key>Space</Key> to jump • <Key>Shift</Key> to sprint</>} />
+                  <Row icon="🧱" label={<><Key>1</Key>-<Key>6</Key> to change material</>} />
+                </>
+              )}
             </div>
 
             {/* Decorative shimmer bar */}
@@ -90,17 +95,9 @@ function Key({ children }: { children: React.ReactNode }) {
 // Plain title using Crackman font
 function PlainTitle({ text }: { text: string }) {
   return (
-    <div className="flex items-center justify-center">
-      <h1 className="font-spenbeb text-orange-600 text-shadow-lg text-4xl">R</h1>
-      <h1 className="font-spenbeb text-orange-600 text-4xl">E</h1>
-      <h1 className="font-spenbeb text-orange-600 text-4xl">D</h1>
-      <h1 className="font-spenbeb text-orange-600 text-4xl">D</h1>
-      <h1 className="font-spenbeb text-orange-600 text-4xl">I</h1>
-      <h1 className="font-spenbeb text-emerald-600 text-4xl">V</h1>
-      <h1 className="font-spenbeb text-emerald-600 text-4xl">E</h1>
-      <h1 className="font-spenbeb text-emerald-600 text-4xl">R</h1>
-      <h1 className="font-spenbeb text-emerald-600 text-4xl">S</h1>
-      <h1 className="font-spenbeb text-emerald-600 text-4xl">E</h1>
+    <div className="flex items-center justify-center" aria-label={text}>
+      <h1 className="font-spenbeb text-orange-600 text-shadow-lg text-4xl">REDDI</h1>
+      <h1 className="font-spenbeb text-emerald-600 text-shadow-lg text-4xl">VERSE</h1>
     </div>
   );
 }
