@@ -5,7 +5,6 @@ import ErrorOverlay from './ui/overlays/ErrorOverlay';
 // import WorldInfo from './ui/overlays/WorldInfo';
 // import DebugLog from './ui/overlays/DebugLog';
 import InfoDock from './ui/overlays/InfoDock';
-import CoordinateDisplay from './ui/overlays/CoordinateDisplay';
 import PlayerStatusDesktop from './ui/panels/PlayerStatusDesktop';
 import PlayerStatusMobile from './ui/panels/PlayerStatusMobile';
 import BlockHotbar from './ui/blocks/BlockHotbar';
@@ -48,8 +47,6 @@ export default function GameScreen() {
     setSmartCreateStatus,
     sceneError,
     debugLogs,
-    playerPosition,
-    chunkPosition,
     handleJoystickStart,
     handleJoystickMove,
     handleJoystickEnd,
@@ -75,12 +72,6 @@ export default function GameScreen() {
           {!isMobile && (
             <InfoDock isMobile={isMobile} worldConfig={worldConfig} canBuild={canBuild} logs={debugLogs} />
           )}
-          {/* Coordinate display */}
-          <CoordinateDisplay 
-            playerPosition={playerPosition} 
-            chunkPosition={chunkPosition} 
-            isMobile={isMobile} 
-          />
           {/* Keep legacy overlays for mobile only (per request: don't show info for mobile, so we skip both) */}
         </>
       )}

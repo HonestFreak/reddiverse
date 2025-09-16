@@ -93,9 +93,9 @@ export const defaultBlockTypes: BlockTypeRegistry = {
     id: 'lava',
     name: 'Lava',
     textures: {
-      top: { type: 'color', value: '#ff2d55' },
-      side: { type: 'color', value: '#ff2d55' },
-      bottom: { type: 'color', value: '#ff2d55' }
+      top: { type: 'image', value: '/lava.png' },
+      side: { type: 'image', value: '/lava.png' },
+      bottom: { type: 'image', value: '/lava.png' }
     },
     fallbackColor: '#ff2d55'
   },
