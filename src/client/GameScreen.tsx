@@ -2,15 +2,12 @@ import { useEffect } from 'react';
 import { useVoxelGame } from './game/useVoxelGame';
 import StartOverlay from './ui/overlays/StartOverlay';
 import ErrorOverlay from './ui/overlays/ErrorOverlay';
-// import WorldInfo from './ui/overlays/WorldInfo';
-// import DebugLog from './ui/overlays/DebugLog';
 import InfoDock from './ui/overlays/InfoDock';
 import PlayerStatusDesktop from './ui/panels/PlayerStatusDesktop';
 import PlayerStatusMobile from './ui/panels/PlayerStatusMobile';
 import BlockHotbar from './ui/blocks/BlockHotbar';
 import BlockPaletteModal from './ui/blocks/BlockPaletteModal';
 import MobileControls from './ui/controls/MobileControls';
-// import BuilderManagementModal from './ui/modals/BuilderManagementModal';
 import SmartBlockCreateModal from './ui/modals/SmartBlockCreateModal';
 import DeathOverlay from './ui/overlays/DeathOverlay';
 import WinnerOverlay from './ui/overlays/WinnerOverlay';
@@ -77,7 +74,6 @@ export default function GameScreen() {
       />
       {!sceneError && (
         <>
-          {/* Hide legacy overlays on desktop in favor of InfoDock */}
           {!isMobile && (
             <InfoDock 
               isMobile={isMobile} 
@@ -88,7 +84,6 @@ export default function GameScreen() {
               chunkPosition={chunkPosition}
             />
           )}
-          {/* Keep legacy overlays for mobile only (per request: don't show info for mobile, so we skip both) */}
         </>
       )}
 
