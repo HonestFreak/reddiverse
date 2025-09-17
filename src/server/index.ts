@@ -136,7 +136,7 @@ router.post('/internal/menu/start-world-create', async (_req, res): Promise<void
       showForm: {
         name: 'worldConfigCreateForm',
         form: {
-          title: 'Create Voxel World',
+          title: 'Generate a new Reddiverse',
           description: 'Configure your world settings. World name will be the post title.',
           fields: [
             {

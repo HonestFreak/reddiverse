@@ -173,9 +173,9 @@ export class TerrainGenerator {
           // Allow bedrock-ish bottom
           if (y === 0) { voxels[iw] = 3; continue; } // Stone
           if (y > groundH) {
-            // Underwater fill up to sea level
+            // Underwater fill up to sea level - but deserts have no standing water
             if (y <= seaLevel) {
-              voxels[iw] = 5; // Water
+              voxels[iw] = (biome === 'desert') ? 0 : 5; // No water bodies in desert
             } else {
               voxels[iw] = 0; // Air
             }
@@ -199,7 +199,8 @@ export class TerrainGenerator {
           const carve = caveValue > (1.0 - caveThreshold);
 
           if (carve && y < groundH - 1 && y > 4) {
-            voxels[iw] = (y <= seaLevel) ? 5 : 0; // Carve; water if below sea
+            // Caves: below sea level fill with water unless in desert
+            voxels[iw] = (y <= seaLevel && biome !== 'desert') ? 5 : 0;
             continue;
           }
 
@@ -207,14 +208,21 @@ export class TerrainGenerator {
           const depthFromTop = groundH - y;
           if (depthFromTop === 0) {
             // Top block by biome
-            if (biome === 'desert') voxels[iw] = 4; // Sand
-            else if (biome === 'snow') voxels[iw] = 6; // Snow (surface)
-            else if (biome === 'mountain') voxels[iw] = 3; // Stone top
-            else voxels[iw] = 1; // Grass
+            if (biome === 'desert') {
+              voxels[iw] = 4; // Sand even if below sea level (no underwater dirt in deserts)
+            } else if (groundH <= seaLevel) {
+              voxels[iw] = 7; // Dirt for underwater ground (non-desert)
+            } else if (biome === 'snow') {
+              voxels[iw] = 6; // Snow (surface)
+            } else if (biome === 'mountain') {
+              voxels[iw] = 3; // Stone top
+            } else {
+              voxels[iw] = 1; // Grass
+            }
             topSolid = Math.max(topSolid, y);
           } else if (depthFromTop <= 3) {
-            // Subsurface: dirt or sand depending on biome
-            voxels[iw] = (biome === 'desert') ? 4 : 2; // Sand or Dirt
+            // Subsurface: sand or dirt depending on biome
+            voxels[iw] = (biome === 'desert') ? 4 : 7; // Sand or Dirt
             topSolid = Math.max(topSolid, y);
           } else {
             voxels[iw] = 3; // Stone

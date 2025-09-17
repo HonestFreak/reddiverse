@@ -148,6 +148,16 @@ export const defaultBlockTypes: BlockTypeRegistry = {
       bottom: { type: 'image', value: '/chiseled_stone.png' }
     },
     fallbackColor: '#8a8a8a'
+  },
+  dirt: {
+    id: 'dirt',
+    name: 'Dirt',
+    textures: {
+      top: { type: 'image', value: '/dirt.png' },
+      side: { type: 'image', value: '/dirt.png' },
+      bottom: { type: 'image', value: '/dirt.png' }
+    },
+    fallbackColor: '#8b4513'
   }
 };
 

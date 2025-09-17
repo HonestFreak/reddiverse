@@ -173,7 +173,7 @@ export async function buildVoxelInstancedMeshes(
     return voxels[voxelIndex(lx, ly, lz, sizeX, sizeY)] as VoxelKind;
   };
 
-  const isSolid = (k: VoxelKind) => (k === VoxelKind.Grass || k === VoxelKind.Dirt || k === VoxelKind.Stone || k === VoxelKind.Sand || k === VoxelKind.Snow);
+  const isSolid = (k: VoxelKind) => (k === VoxelKind.Grass || k === VoxelKind.Dirt || k === VoxelKind.Stone || k === VoxelKind.Sand || k === VoxelKind.Snow || k === VoxelKind.DirtNew);
 
   for (let z = 0; z < sizeZ; z++) {
     for (let y = 0; y < sizeY; y++) {

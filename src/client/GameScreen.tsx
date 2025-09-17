@@ -50,6 +50,8 @@ export default function GameScreen() {
     setSmartCreateStatus,
     sceneError,
     debugLogs,
+    playerPosition,
+    chunkPosition,
     handleJoystickStart,
     handleJoystickMove,
     handleJoystickEnd,
@@ -77,7 +79,14 @@ export default function GameScreen() {
         <>
           {/* Hide legacy overlays on desktop in favor of InfoDock */}
           {!isMobile && (
-            <InfoDock isMobile={isMobile} worldConfig={worldConfig} canBuild={canBuild} logs={debugLogs} />
+            <InfoDock 
+              isMobile={isMobile} 
+              worldConfig={worldConfig} 
+              canBuild={canBuild} 
+              logs={debugLogs}
+              playerPosition={playerPosition}
+              chunkPosition={chunkPosition}
+            />
           )}
           {/* Keep legacy overlays for mobile only (per request: don't show info for mobile, so we skip both) */}
         </>

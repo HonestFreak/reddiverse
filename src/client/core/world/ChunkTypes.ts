@@ -22,6 +22,7 @@ export const enum VoxelKind {
   Sand = 4,
   Water = 5,
   Snow = 6,
+  DirtNew = 7,
 }
 
 export type ChunkData3D = {
@@ -53,6 +54,7 @@ export function voxelToBlockId(kind: VoxelKind): string {
     case VoxelKind.Sand: return 'sand';
     case VoxelKind.Water: return 'water';
     case VoxelKind.Snow: return 'snow';
+    case VoxelKind.DirtNew: return 'dirt';
     case VoxelKind.Air:
     default: return 'air';
   }
