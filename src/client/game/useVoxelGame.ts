@@ -811,6 +811,9 @@ export function useVoxelGame(): VoxelGameHook {
         ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(name, canvas.width / 2, canvas.height / 2);
         const tex = new THREE.CanvasTexture(canvas); tex.needsUpdate = true; const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false }); const sprite = new THREE.Sprite(mat); sprite.scale.set(1.0, 0.5, 1); sprite.position.set(0, 1.1, 0); return sprite;
       }
+      // Store target positions for smooth interpolation
+      const targetPositions = new Map<string, { position: THREE.Vector3; yaw: number; timestamp: number }>();
+
       function addOrUpdateRemote(user: string, position: PlayerPosition): void {
         if (user === selfUsername) return; 
         let group = remotePlayers.get(user);
@@ -838,7 +841,14 @@ export function useVoxelGame(): VoxelGameHook {
           scene.add(group); 
           remotePlayers.set(user, group); 
         }
-        group.position.set(position.x, position.y, position.z);
+        
+        // Store target position for smooth interpolation
+        const targetPos = new THREE.Vector3(position.x, position.y, position.z);
+        targetPositions.set(user, {
+          position: targetPos,
+          yaw: position.yaw,
+          timestamp: Date.now()
+        });
       }
       function removeRemote(user: string): void { const group = remotePlayers.get(user); if (group) { scene.remove(group); remotePlayers.delete(user); } }
       function getPlayerPosition(): PlayerPosition { return { x: controller.playerBase.x, y: controller.playerBase.y, z: controller.playerBase.z, yaw }; }
@@ -899,13 +909,83 @@ export function useVoxelGame(): VoxelGameHook {
               },
             });
           } catch (error) { addDebugLog(`Realtime failed: ${error}`); }
-          posInterval = window.setInterval(async () => { try { await fetch('/api/pos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ position: getPlayerPosition() }) }); } catch (_) {} }, 125);
-          presencePollInterval = window.setInterval(async () => { try { const pr2 = await fetch('/api/presence'); const pdata2 = await pr2.json(); const players2 = (pdata2.players ?? []) as { user: string; position: PlayerPosition }[]; players2.forEach((p) => addOrUpdateRemote(p.user, p.position)); } catch (_) {} }, 2000);
+          // Throttled position updates with backoff on errors
+          let lastPositionUpdate = 0;
+          let positionUpdateThrottle = 500; // Start with 2 Hz
+          let consecutiveErrors = 0;
+          const maxThrottle = 2000; // Max 0.5 Hz on repeated errors
+          
+          posInterval = window.setInterval(async () => { 
+            const now = Date.now();
+            if (now - lastPositionUpdate >= positionUpdateThrottle) {
+              lastPositionUpdate = now;
+              try { 
+                const response = await fetch('/api/pos', { 
+                  method: 'POST', 
+                  headers: { 'Content-Type': 'application/json' }, 
+                  body: JSON.stringify({ position: getPlayerPosition() }) 
+                });
+                
+                if (response.ok) {
+                  consecutiveErrors = 0;
+                  positionUpdateThrottle = Math.max(200, positionUpdateThrottle * 0.9); // Gradually speed up
+                } else {
+                  consecutiveErrors++;
+                  positionUpdateThrottle = Math.min(maxThrottle, positionUpdateThrottle * 1.5); // Slow down on errors
+                  console.warn('Position update failed:', response.status);
+                }
+              } catch (error) {
+                consecutiveErrors++;
+                positionUpdateThrottle = Math.min(maxThrottle, positionUpdateThrottle * 1.5);
+                console.warn('Position update error:', error);
+              } 
+            }
+          }, 200); // Check every 200ms
+          presencePollInterval = window.setInterval(async () => { 
+            try { 
+              const pr2 = await fetch('/api/presence'); 
+              if (!pr2.ok) {
+                console.warn('Presence fetch failed:', pr2.status);
+                return;
+              }
+              const pdata2 = await pr2.json(); 
+              const players2 = (pdata2.players ?? []) as { user: string; position: PlayerPosition }[];
+              players2.forEach((p) => addOrUpdateRemote(p.user, p.position)); 
+            } catch (error) {
+              console.warn('Presence fetch error:', error);
+            } 
+          }, 200); // 5 Hz - more conservative to avoid 503 errors
           const leave = async () => { try { await fetch('/api/leave', { method: 'POST' }); } catch (_) {} };
           window.addEventListener('beforeunload', leave);
         } catch (_) {}
       }
 
+      let lastBlockVersion = 0;
+
+      async function loadBlockChanges(): Promise<void> {
+        try {
+          const res = await fetch(`/api/blocks/changes?sinceVersion=${lastBlockVersion}`);
+          if (res.status === 304) return; // No changes
+          
+          const data = await res.json();
+          lastBlockVersion = data.version;
+          
+          // Only process changed blocks
+          for (const change of data.changes) {
+            const key = getBlockKey(change.x, change.y, change.z);
+            const already = placedMeshes.find((m) => (m as any).userData.isPlaced && (m as any).userData.key === key);
+            
+            if (change.type === 'add' && !already) {
+              const options = change.color ? { color: change.color, persist: false } : { persist: false };
+              void placeBlock(Math.floor(change.x), Math.floor(change.y), Math.floor(change.z), (change.blockType ?? 'grass'), options as { color?: string; persist?: boolean });
+            } else if (change.type === 'remove' && already) {
+              removeBlock(Math.floor(change.x), Math.floor(change.y), Math.floor(change.z), { persist: false, force: true });
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Keep the old function for initial load
       async function loadPersistedBlocks(): Promise<void> {
         try {
           const res = await fetch('/api/blocks'); const data = await res.json();
@@ -946,11 +1026,38 @@ export function useVoxelGame(): VoxelGameHook {
         const chunkZ = Math.floor((currentPos.z + Math.floor(sizeZ / 2)) / sizeZ);
         setChunkPosition({ x: chunkX, z: chunkZ });
         
+        // Smooth interpolation for remote players
+        const now = Date.now();
+        const interpolationSpeed = 0.15; // Slightly faster interpolation
+        const maxStaleTime = 5000; // Remove stale positions after 5 seconds
+        
+        for (const [user, targetData] of targetPositions.entries()) {
+          const group = remotePlayers.get(user);
+          if (group) {
+            const timeSinceUpdate = now - targetData.timestamp;
+            
+            // Remove stale positions
+            if (timeSinceUpdate > maxStaleTime) {
+              targetPositions.delete(user);
+              continue;
+            }
+            
+            // Smooth position interpolation
+            group.position.lerp(targetData.position, interpolationSpeed);
+            
+            // Smooth rotation interpolation
+            const targetYaw = targetData.yaw;
+            const currentYaw = group.rotation.y;
+            const yawDiff = ((targetYaw - currentYaw + Math.PI) % (2 * Math.PI)) - Math.PI;
+            group.rotation.y += yawDiff * interpolationSpeed;
+          }
+        }
+        
         renderer.render(scene, camera);
       }
       animate();
-      void loadPersistedBlocks();
-      blocksPollInterval = window.setInterval(() => { void loadPersistedBlocks(); }, 3000);
+      void loadPersistedBlocks(); // Initial load
+      blocksPollInterval = window.setInterval(() => { void loadBlockChanges(); }, 1000); // Delta updates every 1 second - more conservative
       const loadPlayerState = async () => { try { const res = await fetch('/api/player-state'); if (res.ok) { const state = await res.json(); setPlayerState(state); } } catch (_) {} };
       playerStatePollInterval = window.setInterval(() => { void loadPlayerState(); }, 1000);
 

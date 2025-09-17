@@ -60,9 +60,34 @@ async function migrateFromPostData(postId: string): Promise<VoxelBlock[]> {
 async function saveBlocksToRedis(postId: string, blocks: VoxelBlock[]): Promise<void> {
   try {
     await redis.set(getBlocksKey(postId), JSON.stringify(blocks));
+    // Increment version counter for delta updates using incrBy
+    await redis.incrBy(`${getBlocksKey(postId)}:version`, 1);
   } catch (e) {
     console.error('Failed to save blocks to Redis', e);
     throw e;
+  }
+}
+
+async function getBlockChangesSince(postId: string, sinceVersion: number): Promise<Array<{type: 'add' | 'remove', x: number, y: number, z: number, blockType?: string, color?: string}>> {
+  try {
+    const currentVersion = parseInt(await redis.get(`${getBlocksKey(postId)}:version`) || '0');
+    if (sinceVersion >= currentVersion) {
+      return [];
+    }
+    
+    // For now, return all blocks as changes (can be optimized later with proper change tracking)
+    const blocks = await getBlocksFromRedis(postId);
+    return blocks.map(block => ({
+      type: 'add' as const,
+      x: block.x,
+      y: block.y,
+      z: block.z,
+      blockType: block.type,
+      color: block.color
+    }));
+  } catch (e) {
+    console.error('Failed to get block changes', e);
+    return [];
   }
 }
 
@@ -80,6 +105,34 @@ export function mountBlocksRoutes(router: Router): void {
     } catch (e) {
       console.error('Failed reading blocks from Redis', e);
       res.status(500).json({ status: 'error', message: 'Failed to read blocks' });
+    }
+  });
+
+  router.get('/api/blocks/changes', async (req, res): Promise<void> => {
+    const { postId } = context;
+    if (!postId) {
+      res.status(400).json({ status: 'error', message: 'postId is required' });
+      return;
+    }
+    
+    const sinceVersion = parseInt(req.query.sinceVersion as string) || 0;
+    
+    try {
+      const currentVersion = parseInt(await redis.get(`${getBlocksKey(postId)}:version`) || '0');
+      
+      if (sinceVersion >= currentVersion) {
+        res.status(304).end(); // No changes
+        return;
+      }
+      
+      const changes = await getBlockChangesSince(postId, sinceVersion);
+      res.json({ 
+        version: currentVersion, 
+        changes 
+      });
+    } catch (e) {
+      console.error('Failed to get block changes', e);
+      res.status(500).json({ status: 'error', message: 'Failed to get block changes' });
     }
   });
 
