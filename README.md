@@ -118,10 +118,11 @@ Smart blocks can execute various actions:
 ## 🌅 Day/Night Cycle System
 
 ### **15-Minute Real-Time Cycles**
-- Synchronized across all players using real-world time
-- Each 15-minute period represents a full day/night cycle
-- Time calculation: `(currentMinute % 15) / 15`
-- All players experience the same time of day simultaneously
+- **Synchronized Time**: All players see identical time using real-world minutes
+- **Time Formula**: `(currentMinute % 15) / 15` - creates 4 cycles per hour
+- **Global Sync**: Every player experiences dawn, noon, sunset, night simultaneously
+- **Cloud Movement**: Dynamic cloud systems respond to time-of-day lighting
+- **Atmospheric Transitions**: Smooth color gradients across sky, clouds, and lighting
 
 ### **Dynamic Sky System**
 - **Skybox Rendering**: Custom shaders with smooth gradients and sun glow effects
@@ -145,32 +146,186 @@ Smart blocks can execute various actions:
 ## 🏗️ Technical Architecture
 
 ### **Terrain Generation**
-- **Perlin Noise**: Multi-octave fractal noise for natural terrain
-- **Multi-Noise Fields**: Separate noise layers for continentalness, erosion, peaks, temperature, and humidity
-- **Erosion Simulation**: Realistic terrain shaping with erosion curves
-- **Cave Generation**: 3D noise-based cave systems
-- **Biome Selection**: Climate-based biome determination using temperature and humidity
+
+Reddiverse uses a sophisticated multi-layered Perlin noise system to create realistic, varied terrain. The system combines multiple noise fields with different scales and purposes to generate natural-looking landscapes.
+
+#### **Perlin Noise Types**
+
+**2D Noise Fields (Terrain Shaping):**
+- **Continentalness**: Controls land vs ocean distribution (scale: 512-700 world units)
+- **Erosion**: Simulates river basins and eroded valleys (scale: 256-300 world units)  
+- **Peaks**: Creates mountain ridges and valleys (scale: 170-220 world units)
+- **Temperature**: Determines climate bands for biome selection (scale: 800-1200 world units)
+- **Humidity**: Controls moisture levels for biome determination (scale: 900-1000 world units)
+
+**3D Noise Fields (Cave Generation):**
+- **Caves Primary**: Large-scale cave systems (scale: 90-110 world units)
+- **Caves Detail**: Fine cave details and passages (scale: 28-36 world units)
+
+#### **Fractal Brownian Motion (fBm)**
+Each noise field uses multi-octave fractal noise with configurable parameters:
+- **Octaves**: Number of noise layers (3-6 depending on biome)
+- **Persistence**: Amplitude falloff per octave (0.38-0.55)
+- **Lacunarity**: Frequency increase per octave (2.0-2.25)
+- **Ridged Mode**: For peaks noise, creates sharp mountain ridges
+
+#### **Height Calculation Weights**
+The final terrain height combines multiple factors with biome-specific weights:
+
+**Base Elevation:**
+- Continentalness weight: 0.4-0.5 (determines land vs ocean)
+- Mountain weight: 0.6-0.9 (amplifies peaks in low-erosion areas)
+- Relief weight: 0.5-0.6 (adds local hills and valleys)
+
+**Erosion Effects:**
+- Mountains are amplified in low-erosion regions: `mountain = max(0, peaks - 0.5) * (1.0 - erosion)`
+- Erosion reduces mountain height, creating more realistic terrain
+
+#### **Biome-Specific Configurations**
+
+**Desert Biome:**
+- Scale: 64 (smoother terrain)
+- Height Scale: 12 blocks (low elevation)
+- Octaves: 3 (simpler noise)
+- Sea Level: 2 blocks (minimal water)
+- No erosion curve (natural dune shapes)
+- Continentalness Scale: 600 (larger land masses)
+
+**Mountains Biome:**
+- Scale: 80 (moderate detail)
+- Height Scale: 64 blocks (high elevation)
+- Octaves: 6 (complex noise)
+- Sea Level: 8 blocks
+- Ridged mode enabled (sharp peaks)
+- Continentalness Scale: 700 (dramatic elevation changes)
+
+**Greenery Biome:**
+- Scale: 120 (smooth, rolling hills)
+- Height Scale: 40 blocks (moderate elevation)
+- Octaves: 5 (balanced complexity)
+- Sea Level: 9 blocks
+- Erosion curve disabled (allows deeper valleys for water)
+
+#### **Water Bodies and Sea Level**
+- **Sea Level**: Configurable water level (2-9 blocks depending on biome)
+- **Underwater Terrain**: Areas below sea level fill with water blocks
+- **Desert Exception**: Deserts have no standing water bodies
+- **Cave Water**: Underground caves below sea level fill with water (except in deserts)
+- **Surface Water**: Natural water bodies form in low-lying areas
+
+#### **Cave Generation System**
+- **3D Noise Combination**: Primary + detail noise for realistic cave shapes
+- **Cave Threshold**: 0.08-0.12 (lower = more caves)
+- **Depth Limits**: Caves only generate below surface and above bedrock (y > 4)
+- **Water Integration**: Caves below sea level fill with water
+- **Biome Awareness**: Desert caves don't fill with water
+
+#### **Altitude and Snow System**
+- **Snow Threshold**: Mountains above sea level + 10 blocks get snow overlay
+- **Snow Depth**: 3 blocks of snow on qualifying mountain peaks
+- **Temperature-Based**: Snow appears in cold, high-altitude areas
+- **Visual Overlay**: Snow replaces surface blocks without changing terrain shape
+
+#### **Foliage Generation**
+The system procedurally places vegetation based on biome and climate:
+
+**Foliage Density:**
+- Uses dedicated Perlin noise for placement (scale: 256 world units)
+- Biome multipliers: Desert (0.25), Snow (0.5), Greenery (1.0)
+- Maximum per chunk: Desert (3), Snow (3), Greenery (7)
+
+**Tree Variants (Greenery/Mountains):**
+- **Small Trees** (50%): 3-block trunk, dense leaf canopy
+- **Default Trees** (35%): 4-block trunk, 3x3 leaf canopy with branches
+- **Big Trees** (15%): 5-block trunk, complex branching with multiple leaf clusters
+
+**Cactus Variants (Desert):**
+- **Small Cactus** (50%): 3-block column with 2 arms
+- **Tall Cactus** (50%): 5-block column with 3 complex arms
+
+**Placement Algorithm:**
+- Tests 6 random positions per structure
+- Selects highest elevation point for placement
+- Ensures structures spawn on solid ground
+- Collision detection for trunk/wood blocks only
+
+#### **Seed System**
+- **Deterministic Generation**: Same seed produces identical terrain
+- **Noise Seeding**: Each noise field uses unique seed offsets for independence
+- **Seed Offsets**: 
+  - Continentalness: `seed + 0x9e3779b9`
+  - Erosion: `seed + 0x85ebca6b`
+  - Peaks: `seed + 0xc2b2ae35`
+  - Temperature: `seed + 0x27d4eb2f`
+  - Humidity: `seed + 0x165667b1`
+  - Caves Primary: `seed + 0x27d4eb2f ^ 0x9e3779b9`
+  - Caves Detail: `seed + 0x94d049bb ^ 0x85ebca6b`
+
+#### **Erosion Curves**
+- **Smoothstep**: `3t² - 2t³` for gentle lowlands (greenery/desert)
+- **Smootherstep**: `6t⁵ - 15t⁴ + 10t³` for S-shaped mountain profiles
+- **Purpose**: Creates more natural terrain transitions and exposes water bodies
 
 ### **Chunk System**
+- **Chunk Size**: 64×64×96 blocks per chunk (4,096 blocks total)
+- **Render Distance**: 1 chunk radius (3×3 = 9 chunks loaded simultaneously)
+- **Memory Footprint**: ~37,000 blocks in memory at any time
+- **Instanced Rendering**: Single mesh instances for repeated block types (1000x performance boost)
 - **Dynamic Loading**: Chunks load/unload based on player proximity
-- **Instanced Rendering**: Efficient rendering of repeated block types
-- **Memory Management**: Automatic cleanup of distant chunks
-- **Preloading**: Spawn area chunks preloaded for instant interaction
+- **Preloading**: Spawn area 3×3 chunks preloaded for instant interaction
+- **Streaming**: Background loading of adjacent chunks for seamless exploration
 
 ### **Multiplayer Architecture**
-- **Real-Time Synchronization**: WebSocket-like connections via Devvit's realtime system
-- **Position Updates**: Throttled position broadcasting (2-0.5 Hz based on connection quality)
-- **Player Presence**: Redis-based presence tracking
-- **Smooth Interpolation**: Client-side prediction and smoothing for other players
-- **Error Handling**: Automatic reconnection and fallback mechanisms
+
+#### **Devvit Platform Limitations**
+- **No WebSockets**: Devvit's realtime system has connection limitations and reliability issues
+- **Polling-Only Architecture**: Must use HTTP polling for position updates due to platform constraints
+- **Connection Instability**: Realtime connections frequently drop, requiring fallback to polling
+- **Rate Limiting**: Server-side throttling prevents overwhelming Reddit's infrastructure
+
+#### **Adaptive Polling System**
+- **Dynamic Frequency**: Starts at 2 Hz (500ms), scales down to 0.5 Hz (2000ms) on errors
+- **Error-Based Backoff**: Consecutive failures increase polling interval exponentially
+- **Connection Quality Detection**: Automatically adjusts based on response success rates
+- **Server Protection**: Prevents overwhelming Reddit's servers with excessive requests
+
+#### **Smooth Movement Interpolation**
+- **Client-Side Prediction**: Local movement is immediate for responsive controls
+- **Remote Player Smoothing**: Other players' movements interpolated between polling updates
+- **Position Extrapolation**: Predicts movement direction when updates are delayed
+- **Lag Compensation**: Maintains smooth gameplay despite network latency
+
+#### **Technical Implementation**
+- **Position Updates**: Throttled broadcasting (2-0.5 Hz based on connection quality)
+- **Player Presence**: Redis-based presence tracking with automatic cleanup
+- **Error Handling**: Automatic reconnection and graceful degradation to polling
+- **Memory Management**: Efficient player state caching and cleanup
 
 ### **Performance Optimizations**
-- **Instanced Meshes**: Single mesh instances for repeated block types
-- **Frustum Culling**: Only render visible chunks
-- **LOD System**: Distance-based level of detail
-- **Texture Atlasing**: Efficient texture memory usage
-- **Chunk Streaming**: Background loading of nearby chunks
-- **Mobile Optimization**: Reduced geometry and effects for mobile devices
+
+#### **Rendering Pipeline**
+- **Instanced Meshes**: Single mesh instances for repeated block types (1000x performance boost)
+- **Material Caching**: Reused materials across identical block faces to prevent duplicate creation
+- **Geometry Caching**: Shared box geometry for all block types (memory efficient)
+- **Texture Optimization**: Nearest-neighbor filtering, disabled mipmaps for pixel art
+- **Render Order**: Water blocks render last (order 10) to reduce transparency sorting artifacts
+
+#### **Memory Management**
+- **Texture Caching**: Automatic texture loading with promise-based deduplication
+- **Stale Position Cleanup**: Remote players removed after 5 seconds of inactivity
+- **Water Group Management**: Automatic cleanup of empty water groups and settled water
+- **Chunk Streaming**: Background loading with automatic memory cleanup
+
+#### **Network Efficiency**
+- **Delta Updates**: Only changed blocks synchronized (1-second polling)
+- **Version Control**: Redis-based versioning prevents duplicate block updates
+- **HTTP 304 Responses**: Server returns "Not Modified" when no changes exist
+- **Conservative Polling**: 5 Hz position updates to avoid 503 errors
+
+#### **Mobile Optimization**
+- **Pixel Ratio Limiting**: `Math.min(window.devicePixelRatio, 2)` prevents excessive rendering
+- **Power Preference**: `high-performance` GPU preference for better mobile performance
+- **Fallback Rendering**: Graceful degradation to basic WebGL if advanced features fail
 
 ## 👥 Player Management System
 
@@ -204,8 +359,10 @@ Smart blocks can execute various actions:
 ### **Block Interaction**
 - **Raycasting**: Precise block placement using 3D ray intersection
 - **Adjacent Placement**: Blocks placed next to clicked faces
-- **Persistence**: All changes saved to Reddit post data
-- **Real-Time Sync**: Changes broadcast to all players instantly
+- **Dual Persistence**: Redis for real-time sync + Reddit post data for long-term storage
+- **Version Control**: Redis-based versioning with `incrBy` for atomic updates
+- **Delta Synchronization**: Only changed blocks transmitted (1-second polling)
+- **Migration System**: Automatic migration from old post data format to Redis
 
 ### **Mobile Support**
 - **Touch Controls**: Virtual joystick for movement and rotation
@@ -243,23 +400,40 @@ Smart blocks can execute various actions:
 
 ## 🚀 Use Cases
 
-### **Creative Building**
-- Collaborative world construction
-- Architectural projects and city building
-- Art installations and creative expressions
-- Educational environments and simulations
+### **World Creation & Exploration**
+- **Collaborative Building**: Create persistent worlds with friends that others can explore
+- **Architectural Projects**: Build cities, monuments, and complex structures
+- **Art Installations**: Design interactive 3D art galleries and exhibitions
+- **Educational Worlds**: Create historical recreations, scientific simulations, or virtual museums
 
-### **Game Development**
-- Custom game mechanics using Smart Blocks
-- Puzzle creation and challenge design
-- Interactive storytelling environments
-- Multiplayer game experiences
+### **Game Development Platform**
+Reddiverse's Smart Block system enables creation of complete games:
 
-### **Social Interaction**
-- Virtual meeting spaces
-- Community building projects
-- Collaborative art creation
-- Educational group activities
+**Puzzle Games:**
+- **Escape Rooms**: Find keys, solve riddles, escape before time runs out
+- **Maze Challenges**: Navigate complex labyrinths with traps and rewards
+- **Logic Puzzles**: Create block-pushing puzzles, sequence challenges
+
+**Adventure Games:**
+- **Treasure Hunts**: Hide items, create clues, build treasure maps
+- **Obstacle Courses**: Parkour challenges with jump pads, speed boosts
+- **Survival Challenges**: Avoid lava blocks, find safe zones, collect resources
+
+**Competitive Games:**
+- **Racing Tracks**: Build race courses with checkpoints and power-ups
+- **Capture the Flag**: Create team-based objectives with custom rules
+- **King of the Hill**: Design control point battles with respawn mechanics
+
+**Educational Games:**
+- **Quiz Mazes**: Answer questions to unlock doors and progress
+- **Historical Reenactments**: Recreate historical events with interactive elements
+- **Science Simulations**: Model physics concepts with programmable blocks
+
+### **Social & Community**
+- **Virtual Events**: Host concerts, conferences, or meetups in custom venues
+- **Community Projects**: Collaborative art installations and world-building
+- **Role-Playing**: Create immersive environments for storytelling
+- **Team Building**: Design cooperative challenges for groups
 
 ## 🔮 Future Enhancements
 
