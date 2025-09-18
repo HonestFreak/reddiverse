@@ -87,8 +87,6 @@ export class SnailManager {
   }
   
   private createSnailsForChunk(chunkX: number, chunkZ: number, chunkSize: { x: number; z: number }): void {
-    const chunkKey = `${chunkX}_${chunkZ}`;
-    
     // Calculate number of snails for this chunk based on density
     const numSnails = Math.floor(this.config.density + Math.random() * 0.5); // Add some randomness
     
@@ -108,9 +106,31 @@ export class SnailManager {
         );
         
         this.snails.set(snail.id, snail);
-        this.scene.add(snail.mesh);
+        // Add mesh to scene when it's loaded
+        this.addSnailToSceneWhenReady(snail);
       }
     }
+  }
+  
+  private addSnailToSceneWhenReady(snail: Snail): void {
+    // Check if mesh is already loaded
+    if (snail.mesh) {
+      this.scene.add(snail.mesh);
+      return;
+    }
+    
+    // Poll for mesh to be loaded
+    const checkInterval = setInterval(() => {
+      if (snail.mesh) {
+        this.scene.add(snail.mesh);
+        clearInterval(checkInterval);
+      }
+    }, 100); // Check every 100ms
+    
+    // Clear interval after 10 seconds to avoid infinite polling
+    setTimeout(() => {
+      clearInterval(checkInterval);
+    }, 10000);
   }
   
   private generateSnailPosition(chunkX: number, chunkZ: number, localIndex: number, chunkSize: { x: number; z: number }): THREE.Vector3 {
@@ -137,7 +157,7 @@ export class SnailManager {
   private removeSnailsFromChunk(chunkKey: string): void {
     const snailsToRemove: string[] = [];
     
-    for (const [snailId, snail] of this.snails.entries()) {
+    for (const [snailId] of this.snails.entries()) {
       if (snailId.startsWith(`snail_${chunkKey.split('_')[0]}_${chunkKey.split('_')[1]}_`)) {
         snailsToRemove.push(snailId);
       }
@@ -146,7 +166,9 @@ export class SnailManager {
     for (const snailId of snailsToRemove) {
       const snail = this.snails.get(snailId);
       if (snail) {
-        this.scene.remove(snail.mesh);
+        if (snail.mesh) {
+          this.scene.remove(snail.mesh);
+        }
         snail.dispose();
         this.snails.delete(snailId);
       }
@@ -177,7 +199,9 @@ export class SnailManager {
   
   public dispose(): void {
     for (const snail of this.snails.values()) {
-      this.scene.remove(snail.mesh);
+      if (snail.mesh) {
+        this.scene.remove(snail.mesh);
+      }
       snail.dispose();
     }
     this.snails.clear();
