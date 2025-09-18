@@ -49,6 +49,7 @@ export default function GameScreen() {
     debugLogs,
     playerPosition,
     chunkPosition,
+    snailCount,
     handleJoystickStart,
     handleJoystickMove,
     handleJoystickEnd,
@@ -82,6 +83,7 @@ export default function GameScreen() {
               logs={debugLogs}
               playerPosition={playerPosition}
               chunkPosition={chunkPosition}
+              snailCount={snailCount}
             />
           )}
         </>

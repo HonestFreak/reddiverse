@@ -48,11 +48,19 @@ export type ControlsConfig = {
   damping: number;
 };
 
+export type SnailConfig = {
+  density: number; // snails per chunk
+  speed: number; // movement speed multiplier
+  size: number; // size relative to player (0.5 = half player size)
+  detectionRadius: number; // radius for player collision detection
+};
+
 export type GameConfig = {
   terrain: TerrainConfig;
   chunk: ChunkConfig;
   render: RenderConfig;
   controls: ControlsConfig;
+  snails: SnailConfig;
 };
 
 export const defaultGameConfig: GameConfig = {
@@ -97,6 +105,12 @@ export const defaultGameConfig: GameConfig = {
     walkSpeed: 8,
     sprintMultiplier: 1.7,
     damping: 8,
+  },
+  snails: {
+    density: 1, // 2 snails per chunk
+    speed: 0.2, // 30% of player walk speed
+    size: 0.8, // half player size
+    detectionRadius: 0.6, // slightly larger than snail size for collision
   },
 };
 

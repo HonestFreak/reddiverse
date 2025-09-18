@@ -28,9 +28,10 @@ type InfoDockProps = {
   logs: string[];
   playerPosition?: PlayerPosition;
   chunkPosition?: ChunkPosition;
+  snailCount?: number;
 };
 
-export default function InfoDock({ isMobile, worldConfig, canBuild, logs, playerPosition, chunkPosition }: InfoDockProps) {
+export default function InfoDock({ isMobile, worldConfig, canBuild, logs, playerPosition, chunkPosition, snailCount }: InfoDockProps) {
   if (isMobile) return null;
   const [open, setOpen] = useState<null | 'world' | 'logs' | 'coords'>(null);
 
@@ -89,6 +90,9 @@ export default function InfoDock({ isMobile, worldConfig, canBuild, logs, player
               )}
               {worldConfig?.seed && (
                 <div className="text-[9px] opacity-60">Seed: {worldConfig.seed}</div>
+              )}
+              {snailCount !== undefined && (
+                <div className="text-[9px] opacity-60">🐌 Snails: {snailCount}</div>
               )}
             </div>
           )}

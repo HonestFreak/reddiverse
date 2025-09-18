@@ -18,6 +18,7 @@ import { JumperBlock } from '../core/blocks/special/JumperBlock';
 import { WaterBlock } from '../core/blocks/special/WaterBlock';
 import { SkyManager } from '../core/sky/SkyManager';
 import { TimeManager } from '../core/sky/TimeManager';
+import { SnailManager } from '../core/entities/SnailManager';
 
 export type VoxelGameHook = {
   canvasRef: React.MutableRefObject<HTMLCanvasElement | null>;
@@ -54,6 +55,7 @@ export type VoxelGameHook = {
   debugLogs: string[];
   playerPosition: { x: number; y: number; z: number };
   chunkPosition: { x: number; z: number };
+  snailCount: number;
   handleJoystickStart: (e: React.TouchEvent) => void;
   handleJoystickMove: (e: React.TouchEvent) => void;
   handleJoystickEnd: (e: React.TouchEvent) => void;
@@ -115,6 +117,7 @@ export function useVoxelGame(): VoxelGameHook {
   const inputRef = useRef<InputManager | null>(null);
   const blockFactoryRef = useRef<BlockFactory | null>(null);
   const specialManagerRef = useRef<SpecialBlocksManager | null>(null);
+  const snailManagerRef = useRef<SnailManager | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [deathOverlayVisible, setDeathOverlayVisible] = useState<boolean>(false);
@@ -127,6 +130,7 @@ export function useVoxelGame(): VoxelGameHook {
   };
   const [playerPosition, setPlayerPosition] = useState<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
   const [chunkPosition, setChunkPosition] = useState<{ x: number; z: number }>({ x: 0, z: 0 });
+  const [snailCount, setSnailCount] = useState<number>(0);
   const selectedBlockTypeRef = useRef(selectedBlockType);
   const addBlockAtPlayerRef = useRef<() => void>(() => {});
   const removeBlockAtPlayerRef = useRef<() => void>(() => {});
@@ -555,6 +559,19 @@ export function useVoxelGame(): VoxelGameHook {
       specialManager.register('lava', (ctx, _mesh) => new LavaBlock(ctx));
       const { WinnerBlock } = await import('../core/blocks/special/WinnerBlock');
       specialManager.register('winner', (ctx, _mesh) => new WinnerBlock(ctx));
+
+      // Initialize snail manager
+      const snailManager = new SnailManager(
+        scene,
+        defaultGameConfig.snails,
+        terrainParams.seed,
+        heightAt,
+        () => {
+          // On player death callback
+          setPlayerState((prev) => ({ ...prev, life: 0 }));
+        }
+      );
+      snailManagerRef.current = snailManager;
 
       async function handleBlockInteraction(event: MouseEvent | TouchEvent) {
         const canvas = canvasRef.current; if (!canvas) return;
@@ -1008,6 +1025,19 @@ export function useVoxelGame(): VoxelGameHook {
         const delta = Math.min(0.05, clock.getDelta());
         updatePhysics(delta);
         if (specialManager) specialManager.update(delta);
+        
+        // Update snail manager
+        if (snailManagerRef.current) {
+          snailManagerRef.current.update(
+            delta,
+            clock.getElapsedTime(),
+            controller.playerBase,
+            0.4, // player radius
+            { x: defaultGameConfig.chunk.sizeX, z: defaultGameConfig.chunk.sizeZ }
+          );
+          setSnailCount(snailManagerRef.current.getSnailCount());
+        }
+        
         if (timeMgr && skyMgr) {
           const timeOfDay = timeMgr.update();
           skyMgr.updateTimeOfDay(timeOfDay);
@@ -1114,6 +1144,7 @@ export function useVoxelGame(): VoxelGameHook {
         if (blocksPollInterval) window.clearInterval(blocksPollInterval);
         if (playerStatePollInterval) window.clearInterval(playerStatePollInterval);
         if (skyMgr) skyMgr.dispose();
+        if (snailManagerRef.current) snailManagerRef.current.dispose();
         input.detach();
         if (realtimeConnection) { realtimeConnection.disconnect().catch(() => {}); }
       };
@@ -1184,6 +1215,7 @@ export function useVoxelGame(): VoxelGameHook {
     debugLogs,
     playerPosition,
     chunkPosition,
+    snailCount,
     handleJoystickStart,
     handleJoystickMove,
     handleJoystickEnd,
