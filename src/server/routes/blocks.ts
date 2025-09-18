@@ -77,14 +77,17 @@ async function getBlockChangesSince(postId: string, sinceVersion: number): Promi
     
     // For now, return all blocks as changes (can be optimized later with proper change tracking)
     const blocks = await getBlocksFromRedis(postId);
-    return blocks.map(block => ({
-      type: 'add' as const,
-      x: block.x,
-      y: block.y,
-      z: block.z,
-      blockType: block.type,
-      color: block.color
-    }));
+    return blocks.map(block => {
+      const result: { type: 'add' | 'remove'; x: number; y: number; z: number; blockType?: string; color?: string } = {
+        type: 'add' as const,
+        x: block.x,
+        y: block.y,
+        z: block.z
+      };
+      if (block.type) result.blockType = block.type;
+      if (block.color) result.color = block.color;
+      return result;
+    });
   } catch (e) {
     console.error('Failed to get block changes', e);
     return [];
@@ -92,8 +95,9 @@ async function getBlockChangesSince(postId: string, sinceVersion: number): Promi
 }
 
 export function mountBlocksRoutes(router: Router): void {
-  router.get('/api/blocks', async (_req, res): Promise<void> => {
-    const { postId } = context;
+  router.get('/api/blocks', async (req, res): Promise<void> => {
+    // Try to get postId from query parameter first, fallback to context
+    const postId = req.query.postId as string || context.postId;
     if (!postId) {
       res.status(400).json({ status: 'error', message: 'postId is required' });
       return;
@@ -109,7 +113,8 @@ export function mountBlocksRoutes(router: Router): void {
   });
 
   router.get('/api/blocks/changes', async (req, res): Promise<void> => {
-    const { postId } = context;
+    // Try to get postId from query parameter first, fallback to context
+    const postId = req.query.postId as string || context.postId;
     if (!postId) {
       res.status(400).json({ status: 'error', message: 'postId is required' });
       return;
@@ -137,7 +142,8 @@ export function mountBlocksRoutes(router: Router): void {
   });
 
   router.post('/api/blocks/add', async (req, res): Promise<void> => {
-    const { postId } = context;
+    // Try to get postId from request body first, fallback to context
+    const postId = (req.body as any)?.postId || context.postId;
     if (!postId) {
       res.status(400).json({ status: 'error', message: 'postId is required' });
       return;
@@ -176,7 +182,8 @@ export function mountBlocksRoutes(router: Router): void {
   });
 
   router.post('/api/blocks/remove', async (req, res): Promise<void> => {
-    const { postId } = context;
+    // Try to get postId from request body first, fallback to context
+    const postId = (req.body as any)?.postId || context.postId;
     if (!postId) {
       res.status(400).json({ status: 'error', message: 'postId is required' });
       return;

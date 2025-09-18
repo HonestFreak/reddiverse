@@ -450,10 +450,10 @@ export function useVoxelGame(): VoxelGameHook {
 
       function getBlockKey(x: number, y: number, z: number): string { return `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`; }
       async function persistAddBlock(x: number, y: number, z: number, blockType: string, color: string) {
-        try { await fetch('/api/blocks/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, z, type: blockType, color }) }); } catch (_) {}
+        try { await fetch('/api/blocks/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, z, type: blockType, color, postId }) }); } catch (_) {}
       }
       async function persistRemoveBlock(x: number, y: number, z: number) {
-        try { await fetch('/api/blocks/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, z }) }); } catch (_) {}
+        try { await fetch('/api/blocks/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, z, postId }) }); } catch (_) {}
       }
 
       async function placeBlock(x: number, y: number, z: number, blockType: string, opts?: { color?: string; persist?: boolean; userData?: Record<string, unknown> }) {
@@ -981,7 +981,7 @@ export function useVoxelGame(): VoxelGameHook {
 
       async function loadBlockChanges(): Promise<void> {
         try {
-          const res = await fetch(`/api/blocks/changes?sinceVersion=${lastBlockVersion}`);
+          const res = await fetch(`/api/blocks/changes?sinceVersion=${lastBlockVersion}&postId=${postId}`);
           if (res.status === 304) return; // No changes
           
           const data = await res.json();
@@ -1005,7 +1005,7 @@ export function useVoxelGame(): VoxelGameHook {
       // Keep the old function for initial load
       async function loadPersistedBlocks(): Promise<void> {
         try {
-          const res = await fetch('/api/blocks'); const data = await res.json();
+          const res = await fetch(`/api/blocks?postId=${postId}`); const data = await res.json();
           const blocks = (data?.blocks ?? []) as { x: number; y: number; z: number; type?: string; color?: string }[];
           const serverKeys = new Set(blocks.map((b) => getBlockKey(b.x, b.y, b.z)));
           for (const b of blocks) {
